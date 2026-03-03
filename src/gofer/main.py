@@ -10,9 +10,10 @@ from types import FrameType
 from pydantic import ValidationError
 
 from .approval import set_decision
+from .batch import fetch_tickets, run_batch
 from .config import load_settings
 from .dispatcher import dispatch
-from .events import InvalidIssueKey, validate_issue_key
+from .events import InvalidIssueKey, build_event_from_issue, validate_issue_key
 from .jira_client import init_jira_client
 from .poller import JiraPoller
 from .session import init_session_manager
@@ -74,6 +75,50 @@ async def run_loop(settings_args: argparse.Namespace) -> None:
     logger.info("Shutdown complete.")
 
 
+async def run_do(args: argparse.Namespace) -> None:
+    settings = load_settings(args.config)
+
+    if args.max_parallel is not None:
+        settings.config.concurrency.max_parallel_sessions = args.max_parallel
+
+    # Build JQL
+    if args.jql:
+        jql = args.jql
+    elif args.project:
+        jql = (
+            f'assignee = currentUser() AND project = "{args.project}" '
+            f"AND statusCategory != Done ORDER BY priority DESC"
+        )
+    else:
+        print("Error: provide a project key or --jql", file=sys.stderr)
+        sys.exit(1)
+
+    # Initialize singletons
+    init_jira_client(settings)
+    init_session_manager(settings)
+
+    logger.info("Fetching tickets: %s", jql)
+    issues = await fetch_tickets(jql)
+
+    if not issues:
+        print("No tickets found.")
+        return
+
+    events = [build_event_from_issue(issue, "assigned_to_me") for issue in issues]
+    print(f"Found {len(events)} ticket(s):")
+    for event in events:
+        print(f"  {event.issue_key}: {event.summary}")
+
+    results = await run_batch(events, settings)
+
+    succeeded = sum(1 for r in results if r.success)
+    failed = sum(1 for r in results if not r.success)
+    print(f"\nDone: {succeeded} succeeded, {failed} failed")
+    for r in results:
+        if not r.success:
+            print(f"  FAILED {r.issue_key}: {r.error}")
+
+
 def _setup_logging(args: argparse.Namespace) -> None:
     log_level = logging.DEBUG if args.verbose else logging.INFO
     log_format = "%(asctime)s %(process)d %(levelname)-8s %(name)s: %(message)s"
@@ -127,6 +172,26 @@ def main() -> None:
     reject_parser = subparsers.add_parser("reject", help="Reject a pending ticket")
     reject_parser.add_argument("issue_key", help="Jira issue key (e.g. PROJ-123)")
 
+    # Do subcommand — batch work tickets
+    do_parser = subparsers.add_parser("do", help="Batch work your open tickets")
+    do_parser.add_argument(
+        "project",
+        nargs="?",
+        default=None,
+        help="Jira project key (e.g. PROJ)",
+    )
+    do_parser.add_argument(
+        "--jql",
+        default=None,
+        help="Custom JQL query (overrides project-based query)",
+    )
+    do_parser.add_argument(
+        "--max-parallel",
+        type=int,
+        default=None,
+        help="Override max parallel sessions",
+    )
+
     args = parser.parse_args()
     _setup_logging(args)
 
@@ -153,6 +218,9 @@ def main() -> None:
             else:
                 print(f"No pending approval found for {args.issue_key}", file=sys.stderr)
                 sys.exit(1)
+
+        elif args.command == "do":
+            asyncio.run(run_do(args))
 
         else:
             # Default: run the daemon (either no subcommand or "run")

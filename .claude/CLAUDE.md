@@ -11,15 +11,19 @@ Python project using `uv` for package management. Source lives in `src/gofer/`.
 - `uv run gofer --log-file /path/to/file.log` — log to file (daemon mode)
 - `uv run gofer approve PROJ-123` — approve a pending ticket
 - `uv run gofer reject PROJ-123` — reject a pending ticket
+- `uv run gofer do PROJ` — batch work all your open tickets on project PROJ
+- `uv run gofer do --jql 'project=PROJ AND ...'` — batch work with custom JQL
+- `uv run gofer do PROJ --max-parallel 2` — override concurrency limit
 
 ## Project layout
 
 ```
 src/gofer/
-├── main.py          # Entry point, poll loop, CLI (run/approve/reject subcommands)
+├── main.py          # Entry point, poll loop, CLI (run/approve/reject/do subcommands)
 ├── config.py        # EnvSettings (pydantic-settings) + YamlConfig → Settings
 ├── models.py        # JiraEvent, GateResult (Pydantic v2)
-├── events.py        # classify_changes() — compares issue state diffs
+├── events.py        # classify_changes() + build_event_from_issue() — event construction
+├── batch.py         # Batch orchestrator: fetch_tickets() + run_batch() for `gofer do`
 ├── dispatcher.py    # @handles() decorator registry + async dispatch() with error isolation
 ├── poller.py        # JiraPoller — JQL polling, tracks issue state diffs
 ├── jira_client.py   # Shared JIRA client singleton + async add_comment() helper
@@ -48,6 +52,7 @@ src/gofer/
 - **File-based approval**: `approval.py` writes pending entries to JSON, polls for decisions. CLI `approve`/`reject` subcommands call `set_decision()`.
 - **Slack notifications**: `slack_client.post_slack()` is a no-op when `slack` config is absent. Callers don't need conditionals.
 - **Config migration**: `YamlConfig` has a `model_validator` that auto-migrates old flat project format (`{ repo, branch }`) to new `ProjectConfig` format (`{ default: { repo, branch }, components: {} }`).
+- **Batch mode**: `gofer do` is a one-shot batch runner. `batch.py` fetches tickets via JQL, converts to events with `build_event_from_issue()`, and fires them all through `handle_ticket_work()` via `asyncio.gather()`. The `SessionManager` semaphore handles throttling.
 
 ## Conventions
 

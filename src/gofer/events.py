@@ -71,6 +71,14 @@ def _build_base_event(issue: dict[str, Any], event_type: str) -> dict[str, Any]:
     }
 
 
+def build_event_from_issue(issue: dict[str, Any], event_type: str) -> JiraEvent:
+    """Build a JiraEvent from a raw Jira issue dict without diff machinery."""
+    return JiraEvent(
+        **_build_base_event(issue, event_type),
+        fields_changed=[],
+    )
+
+
 def classify_changes(
     issue: dict[str, Any],
     previous_state: dict[str, Any] | None,
