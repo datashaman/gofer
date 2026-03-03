@@ -4,18 +4,30 @@
 poll_interval: 60  # seconds between polls
 
 # Project-to-repo mapping (supports component-level routing)
+# Components can map to a single repo or a list of candidate repos.
+# When multiple repos are listed, a lightweight Claude call selects
+# which repos are relevant to each ticket.
 projects:
   PROJ:
     default:
       repo: /path/to/repo
       branch: main
     components:
+      # Single-repo component — no selector call needed
       frontend:
         repo: /path/to/frontend-repo
         branch: develop
       payments:
         repo: /path/to/payments-service
         branch: main
+      # Multi-repo component — Claude picks relevant repos per ticket
+      # webvitalize:
+      #   - repo: /path/to/webvitalize-ingest
+      #     branch: main
+      #   - repo: /path/to/webvitalize-dashboard
+      #     branch: main
+      #   - repo: /path/to/webvitalize-rum-js
+      #     branch: main
   # Add more project mappings as needed
 
 # Gate thresholds for autonomous work

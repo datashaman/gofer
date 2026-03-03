@@ -109,6 +109,9 @@ async def run_do(args: argparse.Namespace) -> None:
     for event in events:
         print(f"  {event.issue_key}: {event.summary}")
 
+    if args.dry_run:
+        return
+
     results = await run_batch(events, settings)
 
     succeeded = sum(1 for r in results if r.success)
@@ -190,6 +193,11 @@ def main() -> None:
         type=int,
         default=None,
         help="Override max parallel sessions",
+    )
+    do_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="List matching tickets without working them",
     )
 
     args = parser.parse_args()

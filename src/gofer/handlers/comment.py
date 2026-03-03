@@ -101,10 +101,11 @@ async def handle_comment(event: JiraEvent, settings: Settings) -> None:
         logger.debug("Cooldown active for comment on %s — skipping", event.issue_key)
         return
 
-    # Resolve repo mapping
-    repo_mapping = resolve_repo(settings, event.project, event.component, event.issue_key)
-    if repo_mapping is None:
+    # Resolve repo mapping (use first candidate — comments only need read access)
+    candidates = resolve_repo(settings, event.project, event.component, event.issue_key)
+    if candidates is None:
         return
+    repo_mapping = candidates[0]
 
     logger.info(
         "[comment] %s on %s by %s — spawning session",

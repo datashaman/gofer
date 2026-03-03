@@ -26,8 +26,31 @@ class RepoMapping(BaseModel):
 
 
 class ProjectConfig(BaseModel):
-    default: RepoMapping
-    components: dict[str, RepoMapping] = Field(default_factory=dict)
+    default: list[RepoMapping]
+    components: dict[str, list[RepoMapping]] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_repo_mappings(cls, data: Any) -> Any:
+        """Normalize single RepoMapping dicts into one-element lists.
+
+        Accepts both ``{ repo: ..., branch: ... }`` and
+        ``[{ repo: ..., branch: ... }, ...]`` for ``default`` and each
+        component entry.
+        """
+        if not isinstance(data, dict):
+            return data
+        # Normalize default
+        default = data.get("default")
+        if isinstance(default, dict) and "repo" in default:
+            data["default"] = [default]
+        # Normalize components
+        components = data.get("components")
+        if isinstance(components, dict):
+            for key, value in components.items():
+                if isinstance(value, dict) and "repo" in value:
+                    components[key] = [value]
+        return data
 
 
 class SlackConfig(BaseModel):
@@ -90,7 +113,7 @@ class YamlConfig(BaseModel):
         migrated = {}
         for key, value in projects.items():
             if isinstance(value, dict) and "repo" in value and "default" not in value:
-                migrated[key] = {"default": value, "components": {}}
+                migrated[key] = {"default": [value], "components": {}}
             else:
                 migrated[key] = value
         data["projects"] = migrated

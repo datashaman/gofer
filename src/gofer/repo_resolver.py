@@ -12,12 +12,12 @@ def resolve_repo(
     project: str,
     component: str | None,
     issue_key: str,
-) -> RepoMapping | None:
-    """Resolve a repo mapping for the given project and optional component.
+) -> list[RepoMapping] | None:
+    """Resolve repo mapping(s) for the given project and optional component.
 
     Resolution order:
-    1. ``projects[project].components[component]`` — exact component match
-    2. ``projects[project].default`` — project fallback
+    1. ``projects[project].components[component]`` — exact component match (may be multiple)
+    2. ``projects[project].default`` — project fallback (may be multiple)
     3. ``None`` — project not configured
     """
     project_config = settings.config.projects.get(project)

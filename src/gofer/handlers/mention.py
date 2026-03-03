@@ -87,10 +87,11 @@ async def handle_mention(event: JiraEvent, settings: Settings) -> None:
         logger.debug("Cooldown active for mention on %s — skipping", event.issue_key)
         return
 
-    # Resolve repo mapping
-    repo_mapping = resolve_repo(settings, event.project, event.component, event.issue_key)
-    if repo_mapping is None:
+    # Resolve repo mapping (use first candidate — mentions only need read access)
+    candidates = resolve_repo(settings, event.project, event.component, event.issue_key)
+    if candidates is None:
         return
+    repo_mapping = candidates[0]
 
     logger.info(
         "[mention] %s on %s by %s — spawning session",

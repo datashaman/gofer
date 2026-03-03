@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from claude_code_sdk import (
     AssistantMessage,
     ClaudeCodeOptions,
+    PermissionMode,
     ResultMessage,
     TextBlock,
     ToolResultBlock,
@@ -64,7 +65,7 @@ class SessionManager:
         model: str | None = None,
         max_turns: int | None = None,
         env: dict[str, str] | None = None,
-        permission_mode: str = "bypassPermissions",
+        permission_mode: PermissionMode = "bypassPermissions",
         disallowed_tools: list[str] | None = None,
     ) -> SessionResult:
         """Run a Claude Code session, blocking on the semaphore for concurrency control."""
@@ -132,7 +133,7 @@ class SessionManager:
         model: str | None,
         max_turns: int | None,
         env: dict[str, str],
-        permission_mode: str = "bypassPermissions",
+        permission_mode: PermissionMode = "bypassPermissions",
         disallowed_tools: list[str] | None = None,
     ) -> SessionResult:
         """Build options, stream query(), and collect results."""

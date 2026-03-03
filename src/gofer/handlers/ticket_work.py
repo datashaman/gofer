@@ -4,12 +4,13 @@ import logging
 from collections import OrderedDict
 
 from ..approval import prompt_approval
-from ..config import Settings
+from ..config import RepoMapping, Settings
 from ..dispatcher import handles
 from ..events import sanitize_log
 from ..gate import check_gate
 from ..models import JiraEvent
 from ..repo_resolver import resolve_repo
+from ..repo_selector import select_repos
 from ..session import SessionResult, get_session_manager
 from ..slack_client import (
     format_approval_needed,
@@ -61,25 +62,50 @@ def _build_prompt(event: JiraEvent) -> str:
     )
 
 
+def _session_key(issue_key: str, repo: RepoMapping) -> str:
+    """Build a dedup key combining issue key and repo path."""
+    return f"{issue_key}:{repo.repo}"
+
+
 @handles("assigned_to_me", "status_changed")
 async def handle_ticket_work(event: JiraEvent, settings: Settings) -> None:
-    """Handle ticket assignment and status changes — resolve repo, create worktree, spawn Claude session."""
+    """Handle ticket assignment and status changes — resolve repos, create worktrees, spawn Claude sessions."""
     session_manager = get_session_manager()
     if session_manager is None:
         logger.error("Session manager not initialized — skipping %s", event.issue_key)
         return
 
-    if session_manager.is_active(event.issue_key):
-        logger.info("Session already active for %s — skipping", event.issue_key)
+    # Resolve repo mapping(s) from project key + component
+    candidates = resolve_repo(settings, event.project, event.component, event.issue_key)
+    if candidates is None:
         return
 
-    if event.issue_key in _completed:  # O(1) lookup in OrderedDict
-        logger.info("Session already completed for %s — skipping", event.issue_key)
+    # Select relevant repos (single candidate skips Claude call)
+    selected = await select_repos(candidates, event, settings)
+    if not selected:
+        logger.warning("No repos selected for %s — skipping", event.issue_key)
         return
 
-    # Resolve repo mapping from project key + component
-    repo_mapping = resolve_repo(settings, event.project, event.component, event.issue_key)
-    if repo_mapping is None:
+    for repo_mapping in selected:
+        await _work_repo(event, repo_mapping, settings)
+
+
+async def _work_repo(
+    event: JiraEvent, repo_mapping: RepoMapping, settings: Settings,
+) -> None:
+    """Run the full worktree → gate → session → slack flow for a single repo."""
+    session_manager = get_session_manager()
+    if session_manager is None:
+        return
+
+    key = _session_key(event.issue_key, repo_mapping)
+
+    if session_manager.is_active(key):
+        logger.info("Session already active for %s — skipping", key)
+        return
+
+    if key in _completed:
+        logger.info("Session already completed for %s — skipping", key)
         return
 
     logger.info(
@@ -100,11 +126,11 @@ async def handle_ticket_work(event: JiraEvent, settings: Settings) -> None:
             base_branch=repo_mapping.branch,
         )
     except Exception:
-        logger.exception("Failed to create worktree for %s", event.issue_key)
+        logger.exception("Failed to create worktree for %s in %s", event.issue_key, repo_mapping.repo)
         return
 
     # Complexity gate
-    gate_result = await check_gate(event, worktree.worktree_path, settings)
+    gate_result = await check_gate(event, str(worktree.worktree_path), settings)
     if gate_result.needs_approval:
         await post_slack(
             settings,
@@ -122,7 +148,7 @@ async def handle_ticket_work(event: JiraEvent, settings: Settings) -> None:
 
     # Run Claude Code session
     result: SessionResult = await session_manager.run_session(
-        issue_key=event.issue_key,
+        issue_key=key,
         prompt=_build_prompt(event),
         cwd=worktree.worktree_path,
         system_prompt=_build_system_prompt(event),
@@ -132,19 +158,19 @@ async def handle_ticket_work(event: JiraEvent, settings: Settings) -> None:
     )
 
     if result.success:
-        _completed[event.issue_key] = None
+        _completed[key] = None
         while len(_completed) > _MAX_COMPLETED:
             _completed.popitem(last=False)
         logger.info(
             "Session for %s completed successfully: turns=%d, cost=$%.4f",
-            event.issue_key,
+            key,
             result.num_turns,
             result.cost_usd or 0,
         )
     else:
         logger.error(
             "Session for %s failed: %s",
-            event.issue_key,
+            key,
             result.error,
         )
 
