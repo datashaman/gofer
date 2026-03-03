@@ -146,21 +146,23 @@ async def run_do(args: argparse.Namespace) -> None:
                 if not branches:
                     continue
 
-                # Show ticket info and available branches
+                # Show ticket info and numbered branch list
                 print(f"\n{event.issue_key}: {event.summary}")
                 print(f"  Repo: {repo_mapping.repo}")
+                # Ticket-matching branches first, then the rest
                 ticket_branches = [b for b in branches if event.issue_key.lower() in b.lower()]
-                other_branches = [b for b in branches if b not in ticket_branches][:5]
-                print(f"  {len(branches)} remote branches available:")
-                for b in ticket_branches:
-                    print(f"    * {b}")
-                for b in other_branches:
-                    print(f"      {b}")
-                if len(branches) > len(ticket_branches) + 5:
-                    print(f"      ... and {len(branches) - len(ticket_branches) - 5} more")
+                other_branches = [b for b in branches if b not in ticket_branches]
+                ordered = ticket_branches + other_branches
+                print(f"  {len(ordered)} remote branches:")
+                for i, b in enumerate(ordered, 1):
+                    marker = "*" if b in ticket_branches else " "
+                    print(f"  {marker} {i:3d}) {b}")
 
-                answer = input("  Branch (enter for fresh, or type/paste name): ").strip()
+                answer = input("  Branch (#, name, or enter for fresh): ").strip()
                 if answer:
+                    # Accept a number or a branch name
+                    if answer.isdigit() and 1 <= int(answer) <= len(ordered):
+                        answer = ordered[int(answer) - 1]
                     save_active_branch(settings, event.issue_key, answer)
                 # If empty, no active_branch saved → _work_repo creates fresh
 
