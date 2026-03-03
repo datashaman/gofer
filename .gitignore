@@ -24,3 +24,8 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# Runtime / secrets
+pending_approvals.json
+*.lock
+config.yaml

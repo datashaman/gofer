@@ -1,18 +1,36 @@
 from __future__ import annotations
 
 import asyncio
+import fcntl
 import json
 import logging
 import os
 import tempfile
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from .config import Settings
 from .models import GateResult
 
 logger = logging.getLogger(__name__)
+
+_VALID_DECISIONS = {"approved", "rejected"}
+
+
+@contextmanager
+def _file_lock(path: Path) -> Iterator[None]:
+    """Acquire an exclusive lock on a .lock file adjacent to *path*."""
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
 
 
 def _pending_path(settings: Settings) -> Path:
@@ -30,12 +48,14 @@ def _read_pending(path: Path) -> list[dict[str, Any]]:
 
 
 def _write_pending(path: Path, entries: list[dict[str, Any]]) -> None:
-    """Write entries atomically via tmpfile + os.replace."""
+    """Write entries atomically via tmpfile + os.replace, with 0o600 perms."""
     fd, tmp = tempfile.mkstemp(dir=path.parent or Path("."), suffix=".tmp")
     try:
+        os.fchmod(fd, 0o600)
         with os.fdopen(fd, "w") as f:
             json.dump(entries, f, indent=2, default=str)
         os.replace(tmp, path)
+        os.chmod(path, 0o600)
     except Exception:
         # Clean up temp file on failure
         try:
@@ -57,18 +77,19 @@ async def prompt_approval(
     path = _pending_path(settings)
     timeout = settings.config.approvals.timeout
 
-    # Write pending entry
-    entries = _read_pending(path)
-    entry = {
-        "issue_key": issue_key,
-        "complexity": gate_result.complexity,
-        "risk": gate_result.risk,
-        "reasons": gate_result.reasons,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-        "decision": None,
-    }
-    entries.append(entry)
-    _write_pending(path, entries)
+    # Write pending entry (locked)
+    with _file_lock(path):
+        entries = _read_pending(path)
+        entry = {
+            "issue_key": issue_key,
+            "complexity": gate_result.complexity,
+            "risk": gate_result.risk,
+            "reasons": gate_result.reasons,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "decision": None,
+        }
+        entries.append(entry)
+        _write_pending(path, entries)
 
     logger.info(
         "Approval needed for %s — run 'gofer approve %s' to approve",
@@ -93,10 +114,11 @@ async def prompt_approval(
         if decision is not None:
             break
 
-    # Clean up entry from file
-    current = _read_pending(path)
-    remaining = [e for e in current if e["issue_key"] != issue_key]
-    _write_pending(path, remaining)
+    # Clean up entry from file (locked)
+    with _file_lock(path):
+        current = _read_pending(path)
+        remaining = [e for e in current if e["issue_key"] != issue_key]
+        _write_pending(path, remaining)
 
     if decision == "approved":
         logger.info("Operator approved %s", issue_key)
@@ -112,18 +134,23 @@ async def prompt_approval(
 
 def set_decision(issue_key: str, decision: str, settings: Settings) -> bool:
     """Set the decision for a pending approval. Returns False if issue_key not found."""
+    if decision not in _VALID_DECISIONS:
+        raise ValueError(f"Invalid decision {decision!r}, must be one of {_VALID_DECISIONS}")
+
     path = _pending_path(settings)
-    entries = _read_pending(path)
 
-    found = False
-    for entry in entries:
-        if entry["issue_key"] == issue_key and entry["decision"] is None:
-            entry["decision"] = decision
-            found = True
-            break
+    with _file_lock(path):
+        entries = _read_pending(path)
 
-    if not found:
-        return False
+        found = False
+        for entry in entries:
+            if entry["issue_key"] == issue_key and entry["decision"] is None:
+                entry["decision"] = decision
+                found = True
+                break
 
-    _write_pending(path, entries)
+        if not found:
+            return False
+
+        _write_pending(path, entries)
     return True

@@ -6,6 +6,8 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
+from .events import validate_issue_key
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,6 +47,7 @@ async def _run_git(*args: str, cwd: Path, timeout: int = _GIT_TIMEOUT) -> str:
 
 async def worktree_exists(repo_path: str | Path, issue_key: str) -> bool:
     """Check whether a worktree for the given issue already exists."""
+    validate_issue_key(issue_key)
     wt_path = Path(repo_path) / ".worktrees" / issue_key
     if not wt_path.exists():
         return False
@@ -62,6 +65,7 @@ async def create_worktree(
     base_branch: str = "main",
 ) -> Worktree:
     """Create a git worktree for the given issue. Idempotent — returns existing if present."""
+    validate_issue_key(issue_key)
     repo = Path(repo_path).resolve()
     wt_dir = repo / ".worktrees"
     wt_path = wt_dir / issue_key

@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from .approval import set_decision
 from .config import load_settings
 from .dispatcher import dispatch
+from .events import InvalidIssueKey, validate_issue_key
 from .jira_client import init_jira_client
 from .poller import JiraPoller
 from .session import init_session_manager
@@ -130,6 +131,13 @@ def main() -> None:
     _setup_logging(args)
 
     try:
+        if args.command in ("approve", "reject"):
+            try:
+                validate_issue_key(args.issue_key)
+            except InvalidIssueKey as e:
+                print(f"Error: {e}", file=sys.stderr)
+                sys.exit(1)
+
         if args.command == "approve":
             settings = load_settings(args.config)
             if set_decision(args.issue_key, "approved", settings):

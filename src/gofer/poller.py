@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections import OrderedDict
 from typing import Any
 
 from .config import Settings
@@ -11,12 +12,14 @@ from .models import JiraEvent
 
 logger = logging.getLogger(__name__)
 
+_MAX_STATE_ENTRIES = 500
+
 
 class JiraPoller:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        # Maps issue key -> last seen raw issue dict
-        self._state: dict[str, dict[str, Any]] = {}
+        # Maps issue key -> last seen raw issue dict (bounded)
+        self._state: OrderedDict[str, dict[str, Any]] = OrderedDict()
         self._my_email = settings.env.jira_email
 
     async def poll(self) -> list[JiraEvent]:
@@ -45,8 +48,13 @@ class JiraPoller:
             events = classify_changes(current, previous, self._my_email)
             all_events.extend(events)
 
-            # Update stored state
+            # Update stored state (move to end for LRU ordering)
             self._state[key] = current
+            self._state.move_to_end(key)
+
+        # Evict oldest entries if over capacity
+        while len(self._state) > _MAX_STATE_ENTRIES:
+            self._state.popitem(last=False)
 
         if all_events:
             logger.info("Poll returned %d events from %d issues", len(all_events), len(issues))

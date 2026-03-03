@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 from typing import Any
 
@@ -8,9 +9,33 @@ from .models import JiraEvent
 
 logger = logging.getLogger(__name__)
 
+_ISSUE_KEY_RE = re.compile(r"^[A-Z][A-Z0-9_]+-\d+$")
+
+
+class InvalidIssueKey(ValueError):
+    """Raised when an issue key doesn't match the expected Jira pattern."""
+
+
+def validate_issue_key(key: str) -> str:
+    """Validate and return the issue key, or raise InvalidIssueKey."""
+    if not _ISSUE_KEY_RE.match(key):
+        raise InvalidIssueKey(f"Invalid issue key: {sanitize_log(key)!r}")
+    return key
+
+
+def sanitize_log(value: str, max_len: int = 200) -> str:
+    """Sanitize a string for safe inclusion in log messages.
+
+    Strips control characters and truncates to max_len.
+    """
+    cleaned = re.sub(r"[\x00-\x1f\x7f]", "", value)
+    if len(cleaned) > max_len:
+        return cleaned[:max_len] + "..."
+    return cleaned
+
 
 def _get_issue_key(issue: dict[str, Any]) -> str:
-    return issue["key"]
+    return validate_issue_key(issue["key"])
 
 
 def _get_updated(issue: dict[str, Any]) -> datetime:
