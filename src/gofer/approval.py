@@ -13,7 +13,6 @@ from typing import Any, Iterator
 
 from .config import Settings
 from .models import GateResult
-from .worktree import ExistingWork
 
 logger = logging.getLogger(__name__)
 
@@ -133,35 +132,28 @@ async def prompt_approval(
     return False
 
 
-async def prompt_resume(
-    issue_key: str,
-    existing_work: ExistingWork,
-    settings: Settings,
-) -> bool:
-    """Prompt operator to resume on existing branch or start fresh.
+_FRESH_SENTINEL = "__fresh__"
 
-    Returns True if the operator approves (resume), False if rejected (start fresh)
-    or timed out.
+
+async def prompt_branch_select(
+    issue_key: str,
+    branches: list[str],
+    settings: Settings,
+) -> str | None:
+    """Write a pending branch_select entry and poll until the operator chooses.
+
+    Returns the selected branch name, or ``None`` for fresh start (including
+    timeout and the ``__fresh__`` sentinel).
     """
     path = _pending_path(settings)
     timeout = settings.config.approvals.timeout
-
-    # Build human-readable summary
-    parts: list[str] = []
-    if existing_work.commits:
-        parts.append(f"{len(existing_work.commits)} commit(s)")
-    if existing_work.pr_url:
-        parts.append("PR open")
-    if existing_work.has_uncommitted:
-        parts.append("uncommitted changes")
-    summary = "; ".join(parts) or "remote branch exists"
 
     with _file_lock(path):
         entries = _read_pending(path)
         entry = {
             "issue_key": issue_key,
-            "type": "resume",
-            "summary": summary,
+            "type": "branch_select",
+            "branches": branches,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "decision": None,
         }
@@ -169,9 +161,9 @@ async def prompt_resume(
         _write_pending(path, entries)
 
     logger.info(
-        "Existing work detected for %s (%s) — run 'gofer approve %s' to resume or 'gofer reject %s' to start fresh",
+        "Branch selection needed for %s (%d branches) — run 'gofer select %s <branch>' or 'gofer select %s --fresh'",
         issue_key,
-        summary,
+        len(branches),
         issue_key,
         issue_key,
     )
@@ -187,7 +179,11 @@ async def prompt_resume(
 
         current = _read_pending(path)
         for e in current:
-            if e["issue_key"] == issue_key and e["decision"] is not None:
+            if (
+                e["issue_key"] == issue_key
+                and e.get("type") == "branch_select"
+                and e["decision"] is not None
+            ):
                 decision = e["decision"]
                 break
         if decision is not None:
@@ -196,19 +192,56 @@ async def prompt_resume(
     # Clean up entry
     with _file_lock(path):
         current = _read_pending(path)
-        remaining = [e for e in current if e["issue_key"] != issue_key]
+        remaining = [
+            e for e in current
+            if not (e["issue_key"] == issue_key and e.get("type") == "branch_select")
+        ]
         _write_pending(path, remaining)
 
-    if decision == "approved":
-        logger.info("Operator approved resume for %s", issue_key)
-        return True
+    if decision and decision != _FRESH_SENTINEL:
+        logger.info("Operator selected branch %r for %s", decision, issue_key)
+        return decision
 
-    if decision == "rejected":
-        logger.info("Operator rejected resume for %s — will start fresh", issue_key)
+    if decision == _FRESH_SENTINEL:
+        logger.info("Operator chose fresh start for %s", issue_key)
     else:
-        logger.info("Resume prompt timed out for %s after %ds — starting fresh", issue_key, timeout)
+        logger.info(
+            "Branch selection timed out for %s after %ds — starting fresh",
+            issue_key, timeout,
+        )
 
+    return None
+
+
+def set_branch_selection(issue_key: str, branch: str, settings: Settings) -> bool:
+    """Set branch selection for a pending branch_select entry."""
+    path = _pending_path(settings)
+    with _file_lock(path):
+        entries = _read_pending(path)
+        for entry in entries:
+            if (
+                entry["issue_key"] == issue_key
+                and entry.get("type") == "branch_select"
+                and entry["decision"] is None
+            ):
+                entry["decision"] = branch
+                _write_pending(path, entries)
+                return True
     return False
+
+
+def get_pending_branches(issue_key: str, settings: Settings) -> list[str] | None:
+    """Return the branch list for a pending branch_select, or None if not found."""
+    path = _pending_path(settings)
+    entries = _read_pending(path)
+    for entry in entries:
+        if (
+            entry["issue_key"] == issue_key
+            and entry.get("type") == "branch_select"
+            and entry["decision"] is None
+        ):
+            return entry.get("branches", [])
+    return None
 
 
 def set_decision(issue_key: str, decision: str, settings: Settings) -> bool:

@@ -55,3 +55,9 @@ concurrency:
 approvals:
   pending_file: pending_approvals.json
   timeout: 3600  # seconds before auto-reject
+
+# Active branch selections (auto-managed — persisted when operator selects a branch)
+# Maps issue_key → branch name so gofer remembers the selection across restarts.
+# active_branches:
+#   PROJ-123: ticket/PROJ-123
+#   PROJ-456: feature/some-branch

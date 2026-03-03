@@ -75,22 +75,45 @@ async def worktree_exists(repo_path: str | Path, issue_key: str) -> bool:
     return str(wt_path) in raw
 
 
+async def list_remote_branches(repo_path: str | Path) -> list[str]:
+    """Return all remote branch names (stripped of 'origin/' prefix)."""
+    repo = Path(repo_path).resolve()
+    try:
+        await _run_git("fetch", "origin", cwd=repo)
+    except RuntimeError:
+        pass
+    try:
+        raw = await _run_git("branch", "-r", "--list", "origin/*", cwd=repo)
+    except RuntimeError:
+        return []
+    branches = []
+    for line in raw.splitlines():
+        line = line.strip()
+        if line.startswith("origin/") and " -> " not in line:
+            branches.append(line.removeprefix("origin/"))
+    return sorted(branches)
+
+
 async def create_worktree(
     repo_path: str | Path,
     issue_key: str,
     base_branch: str = "main",
     force_new: bool = False,
+    existing_branch: str | None = None,
 ) -> Worktree:
     """Create a git worktree for the given issue. Idempotent — returns existing if present.
 
     When *force_new* is True, any existing worktree is removed first so the
     branch starts fresh from ``origin/{base_branch}``.
+
+    When *existing_branch* is set, check out that existing remote branch
+    into the worktree instead of creating a new one.
     """
     validate_issue_key(issue_key)
     repo = Path(repo_path).resolve()
     wt_dir = repo / ".worktrees"
     wt_path = wt_dir / issue_key
-    branch = f"ticket/{issue_key}"
+    branch = existing_branch or f"ticket/{issue_key}"
 
     if await worktree_exists(repo, issue_key):
         if force_new:
@@ -123,17 +146,31 @@ async def create_worktree(
     except RuntimeError:
         logger.warning("Failed to fetch from origin — proceeding with local state")
 
-    # Create worktree with a new branch based on the base branch
-    logger.info("Creating worktree for %s at %s (branch %s from %s)", issue_key, wt_path, branch, base_branch)
-    await _run_git(
-        "worktree",
-        "add",
-        "-b",
-        branch,
-        str(wt_path),
-        f"origin/{base_branch}",
-        cwd=repo,
-    )
+    if existing_branch:
+        # Check out existing remote branch into worktree
+        logger.info(
+            "Creating worktree for %s at %s (existing branch %s)",
+            issue_key, wt_path, existing_branch,
+        )
+        await _run_git(
+            "worktree", "add", str(wt_path), f"origin/{existing_branch}",
+            cwd=repo,
+        )
+    else:
+        # Create worktree with a new branch based on the base branch
+        logger.info(
+            "Creating worktree for %s at %s (branch %s from %s)",
+            issue_key, wt_path, branch, base_branch,
+        )
+        await _run_git(
+            "worktree",
+            "add",
+            "-b",
+            branch,
+            str(wt_path),
+            f"origin/{base_branch}",
+            cwd=repo,
+        )
 
     return Worktree(
         issue_key=issue_key,

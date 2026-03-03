@@ -10,7 +10,7 @@ from types import FrameType
 
 from pydantic import ValidationError
 
-from .approval import set_decision
+from .approval import _FRESH_SENTINEL, get_pending_branches, set_branch_selection, set_decision
 from .batch import fetch_tickets, run_batch
 from .config import load_settings
 from .progress import ProgressTracker
@@ -198,6 +198,13 @@ def main() -> None:
     reject_parser = subparsers.add_parser("reject", help="Reject a pending ticket")
     reject_parser.add_argument("issue_key", help="Jira issue key (e.g. PROJ-123)")
 
+    # Select subcommand — choose a branch for a pending ticket
+    select_parser = subparsers.add_parser("select", help="Select a branch for a pending ticket")
+    select_parser.add_argument("issue_key", help="Jira issue key (e.g. PROJ-123)")
+    select_parser.add_argument("branch", nargs="?", default=None, help="Branch name (omit or --fresh for new branch)")
+    select_parser.add_argument("--fresh", action="store_true", help="Start with a fresh branch")
+    select_parser.add_argument("--list", dest="list_branches", action="store_true", help="List available branches for the ticket")
+
     # Do subcommand — batch work tickets
     do_parser = subparsers.add_parser("do", help="Batch work your open tickets")
     do_parser.add_argument(
@@ -238,7 +245,7 @@ def main() -> None:
     _setup_logging(args)
 
     try:
-        if args.command in ("approve", "reject"):
+        if args.command in ("approve", "reject", "select"):
             try:
                 validate_issue_key(args.issue_key)
             except InvalidIssueKey as e:
@@ -259,6 +266,31 @@ def main() -> None:
                 print(f"Rejected {args.issue_key}")
             else:
                 print(f"No pending approval found for {args.issue_key}", file=sys.stderr)
+                sys.exit(1)
+
+        elif args.command == "select":
+            settings = load_settings(args.config)
+            if args.list_branches:
+                branches = get_pending_branches(args.issue_key, settings)
+                if branches is None:
+                    print(f"No pending branch selection for {args.issue_key}", file=sys.stderr)
+                    sys.exit(1)
+                for b in branches:
+                    print(b)
+            elif args.fresh:
+                if set_branch_selection(args.issue_key, _FRESH_SENTINEL, settings):
+                    print(f"Starting fresh for {args.issue_key}")
+                else:
+                    print(f"No pending branch selection for {args.issue_key}", file=sys.stderr)
+                    sys.exit(1)
+            elif args.branch:
+                if set_branch_selection(args.issue_key, args.branch, settings):
+                    print(f"Selected branch {args.branch!r} for {args.issue_key}")
+                else:
+                    print(f"No pending branch selection for {args.issue_key}", file=sys.stderr)
+                    sys.exit(1)
+            else:
+                print("Error: provide a branch name or --fresh or --list", file=sys.stderr)
                 sys.exit(1)
 
         elif args.command == "do":

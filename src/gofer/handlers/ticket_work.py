@@ -4,8 +4,8 @@ import logging
 from collections import OrderedDict
 from typing import TYPE_CHECKING
 
-from ..approval import prompt_approval, prompt_resume
-from ..config import RepoMapping, Settings
+from ..approval import prompt_approval, prompt_branch_select
+from ..config import RepoMapping, Settings, save_active_branch
 from ..dispatcher import handles
 from ..events import sanitize_log
 from ..gate import check_gate
@@ -18,7 +18,7 @@ from ..slack_client import (
     format_session_result,
     post_slack,
 )
-from ..worktree import ExistingWork, create_worktree, detect_existing_work, remove_worktree
+from ..worktree import ExistingWork, create_worktree, detect_existing_work, list_remote_branches
 
 if TYPE_CHECKING:
     from ..progress import ProgressTracker
@@ -173,51 +173,53 @@ async def _work_repo(
         repo_mapping.branch,
     )
 
-    # Create worktree
-    try:
-        worktree = await create_worktree(
-            repo_path=repo_mapping.repo,
-            issue_key=event.issue_key,
-            base_branch=repo_mapping.branch,
+    # Check config for a previously selected branch
+    selected_branch: str | None = settings.config.active_branches.get(event.issue_key)
+    existing: ExistingWork | None = None
+
+    if selected_branch:
+        logger.info(
+            "Using previously selected branch %r for %s (from config)",
+            selected_branch, event.issue_key,
         )
+    else:
+        # List remote branches and let operator select
+        branches = await list_remote_branches(repo_mapping.repo)
+        if branches:
+            if tracker is not None:
+                tracker.update(
+                    event.issue_key, "waiting_approval",
+                    f"select branch ({len(branches)} available)",
+                )
+
+            selected_branch = await prompt_branch_select(
+                event.issue_key, branches, settings,
+            )
+
+    # Create worktree with selected or fresh branch
+    try:
+        if selected_branch:
+            worktree = await create_worktree(
+                repo_path=repo_mapping.repo,
+                issue_key=event.issue_key,
+                base_branch=repo_mapping.branch,
+                existing_branch=selected_branch,
+            )
+            existing = await detect_existing_work(worktree)
+        else:
+            worktree = await create_worktree(
+                repo_path=repo_mapping.repo,
+                issue_key=event.issue_key,
+                base_branch=repo_mapping.branch,
+            )
     except Exception:
         logger.exception("Failed to create worktree for %s in %s", event.issue_key, repo_mapping.repo)
         if tracker is not None:
             tracker.update(event.issue_key, "failed", "worktree creation failed")
         return
 
-    # Detect existing work on the branch
-    existing: ExistingWork | None = await detect_existing_work(worktree)
-    if existing.has_prior_work:
-        summary_parts = []
-        if existing.commits:
-            summary_parts.append(f"{len(existing.commits)} commit(s)")
-        if existing.pr_url:
-            summary_parts.append("PR open")
-        if existing.has_uncommitted:
-            summary_parts.append("uncommitted changes")
-        detail = "; ".join(summary_parts)
-
-        if tracker is not None:
-            tracker.update(event.issue_key, "waiting_approval", f"existing work: {detail}")
-
-        approved = await prompt_resume(event.issue_key, existing, settings)
-
-        if not approved:
-            # Start fresh
-            await remove_worktree(worktree)
-            worktree = await create_worktree(
-                repo_path=repo_mapping.repo,
-                issue_key=event.issue_key,
-                base_branch=repo_mapping.branch,
-                force_new=True,
-            )
-            existing = None
-        else:
-            if tracker is not None:
-                tracker.update(event.issue_key, "waiting_approval", "resuming")
-    else:
-        existing = None
+    # Persist the branch selection to config
+    save_active_branch(settings, event.issue_key, worktree.branch)
 
     # Complexity gate
     if tracker is not None:

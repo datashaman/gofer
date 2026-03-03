@@ -108,6 +108,8 @@ class YamlConfig(BaseModel):
     concurrency: ConcurrencyConfig = Field(default_factory=ConcurrencyConfig)
     slack: SlackConfig | None = None
     approvals: ApprovalsConfig = Field(default_factory=ApprovalsConfig)
+    active_branches: dict[str, str] = Field(default_factory=dict)
+    """Maps issue_key → branch name for tickets with a selected/created branch."""
 
     @model_validator(mode="before")
     @classmethod
@@ -133,8 +135,11 @@ class YamlConfig(BaseModel):
 
 
 class Settings(BaseModel):
+    model_config = {"arbitrary_types_allowed": True}
+
     env: EnvSettings
     config: YamlConfig
+    config_path: Path = Field(default=Path("config.yaml"), exclude=True)
 
 
 def load_settings(config_path: str | Path = "config.yaml") -> Settings:
@@ -148,4 +153,29 @@ def load_settings(config_path: str | Path = "config.yaml") -> Settings:
         yaml_config = YamlConfig()
 
     env = EnvSettings()  # type: ignore[call-arg]
-    return Settings(env=env, config=yaml_config)
+    return Settings(env=env, config=yaml_config, config_path=config_path)
+
+
+def save_active_branch(
+    settings: Settings,
+    issue_key: str,
+    branch: str,
+) -> None:
+    """Persist an active branch selection to config.yaml so it survives restarts."""
+    config_path = settings.config_path
+
+    if config_path.exists():
+        with open(config_path) as f:
+            raw = yaml.safe_load(f) or {}
+    else:
+        raw = {}
+
+    if "active_branches" not in raw:
+        raw["active_branches"] = {}
+    raw["active_branches"][issue_key] = branch
+
+    with open(config_path, "w") as f:
+        yaml.dump(raw, f, default_flow_style=False, sort_keys=False)
+
+    settings.config.active_branches[issue_key] = branch
+    logger.info("Persisted active branch for %s: %s", issue_key, branch)
