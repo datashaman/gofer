@@ -91,6 +91,11 @@ class GateConfig(BaseModel):
     ]
 
 
+class BatchConfig(BaseModel):
+    status_category: str = "To Do"
+    exclude_statuses: list[str] = Field(default_factory=lambda: ["Blocked"])
+
+
 class ConcurrencyConfig(BaseModel):
     max_parallel_sessions: int = 3
     session_timeout: int = 3600
@@ -99,6 +104,7 @@ class ConcurrencyConfig(BaseModel):
 class YamlConfig(BaseModel):
     poll_interval: int = 60
     projects: dict[str, ProjectConfig] = Field(default_factory=dict)
+    batch: BatchConfig = Field(default_factory=BatchConfig)
     gates: GateConfig = Field(default_factory=GateConfig)
     concurrency: ConcurrencyConfig = Field(default_factory=ConcurrencyConfig)
     slack: SlackConfig | None = None

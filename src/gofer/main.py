@@ -90,12 +90,19 @@ async def run_do(args: argparse.Namespace) -> None:
         if args.all_statuses:
             status_filter = "AND statusCategory != Done"
         else:
-            status_filter = f'AND statusCategory = "{args.status}"'
-        blocked_filter = "" if args.include_blocked else ' AND status != "Blocked"'
+            category = args.status or settings.config.batch.status_category
+            status_filter = f'AND statusCategory = "{category}"'
+
+        # Always apply exclude_statuses from config
+        excludes = settings.config.batch.exclude_statuses
+        if excludes:
+            exclude_clauses = " AND ".join(f'status != "{s}"' for s in excludes)
+            status_filter += f" AND {exclude_clauses}"
+
         jql = (
             f'assignee = currentUser() AND project = "{args.project}" '
             f"AND sprint in openSprints() "
-            f"{status_filter}{blocked_filter} ORDER BY priority DESC"
+            f"{status_filter} ORDER BY priority DESC"
         )
     else:
         print("Error: provide a project key or --jql", file=sys.stderr)
@@ -214,18 +221,13 @@ def main() -> None:
     )
     do_parser.add_argument(
         "--status",
-        default="To Do",
-        help='Filter by Jira status category (default: "To Do")',
+        default=None,
+        help='Filter by Jira status category (default: from config, "To Do")',
     )
     do_parser.add_argument(
         "--all-statuses",
         action="store_true",
         help="Include all non-Done status categories",
-    )
-    do_parser.add_argument(
-        "--include-blocked",
-        action="store_true",
-        help='Include tickets with status "Blocked" (excluded by default)',
     )
     do_parser.add_argument(
         "--dry-run",

@@ -30,6 +30,12 @@ projects:
       #     branch: main
   # Add more project mappings as needed
 
+# Batch mode defaults (gofer do)
+batch:
+  status_category: "To Do"       # default status category filter
+  exclude_statuses:               # statuses excluded from batch runs
+    - "Blocked"
+
 # Gate thresholds for autonomous work
 gates:
   max_complexity: medium    # low, medium, high

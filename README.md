@@ -149,9 +149,17 @@ uv run gofer do --jql 'project=PROJ AND status="In Progress"'
 # Override concurrency limit
 uv run gofer do PROJ --max-parallel 2
 
+# Override status category filter (default from config: "To Do")
+uv run gofer do PROJ --status "In Progress"
+
+# Include all non-Done statuses
+uv run gofer do PROJ --all-statuses
+
 # Dry run — list matching tickets without working them
 uv run gofer do PROJ --dry-run
 ```
+
+Status filtering is configured in `config.yaml` under the `batch` section. The `status_category` default is "To Do" and `exclude_statuses` defaults to `["Blocked"]`. The `--status` CLI flag overrides `status_category`; excluded statuses always apply.
 
 In a TTY, `gofer do` displays a Rich live table showing per-ticket progress. Log output is coordinated through the same Rich console so logs appear above the table without corrupting the display. In non-TTY mode (e.g. piped to a file), plain status lines are printed to stderr instead.
 
