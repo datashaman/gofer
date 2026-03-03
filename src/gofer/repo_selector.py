@@ -93,7 +93,7 @@ async def select_repos(
         max_turns=1,
         system_prompt=_SELECTOR_SYSTEM_PROMPT,
         permission_mode="plan",
-        env={"ANTHROPIC_API_KEY": settings.env.anthropic_api_key},
+        env={"ANTHROPIC_API_KEY": settings.env.anthropic_api_key, "CLAUDECODE": ""},
     )
 
     response_text = ""

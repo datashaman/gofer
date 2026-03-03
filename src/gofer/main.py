@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from .approval import set_decision
 from .batch import fetch_tickets, run_batch
 from .config import load_settings
+from .progress import ProgressTracker
 from .dispatcher import dispatch
 from .events import InvalidIssueKey, build_event_from_issue, validate_issue_key
 from .jira_client import init_jira_client
@@ -87,6 +88,7 @@ async def run_do(args: argparse.Namespace) -> None:
     elif args.project:
         jql = (
             f'assignee = currentUser() AND project = "{args.project}" '
+            f"AND sprint in openSprints() "
             f"AND statusCategory != Done ORDER BY priority DESC"
         )
     else:
@@ -112,7 +114,11 @@ async def run_do(args: argparse.Namespace) -> None:
     if args.dry_run:
         return
 
-    results = await run_batch(events, settings)
+    is_tty = sys.stderr.isatty()
+    tracker = ProgressTracker(events, use_rich=is_tty)
+
+    async with tracker:
+        results = await run_batch(events, settings, tracker=tracker)
 
     succeeded = sum(1 for r in results if r.success)
     failed = sum(1 for r in results if not r.success)

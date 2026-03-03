@@ -3,12 +3,15 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .config import Settings
 from .handlers.ticket_work import handle_ticket_work
 from .jira_client import get_jira_client
 from .models import JiraEvent
+
+if TYPE_CHECKING:
+    from .progress import ProgressTracker
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +35,9 @@ async def fetch_tickets(jql: str) -> list[dict[str, Any]]:
 
 
 async def run_batch(
-    events: list[JiraEvent], settings: Settings
+    events: list[JiraEvent],
+    settings: Settings,
+    tracker: ProgressTracker | None = None,
 ) -> list[TicketResult]:
     """Fire all events through handle_ticket_work concurrently.
 
@@ -42,10 +47,12 @@ async def run_batch(
 
     async def _work(event: JiraEvent) -> TicketResult:
         try:
-            await handle_ticket_work(event, settings)
+            await handle_ticket_work(event, settings, tracker=tracker)
             return TicketResult(issue_key=event.issue_key, success=True)
         except Exception as exc:
             logger.exception("Batch work failed for %s", event.issue_key)
+            if tracker is not None:
+                tracker.update(event.issue_key, "failed", str(exc))
             return TicketResult(
                 issue_key=event.issue_key, success=False, error=str(exc)
             )

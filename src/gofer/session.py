@@ -140,6 +140,8 @@ class SessionManager:
         ticket_logger = logging.getLogger(f"gofer.session.{issue_key}")
         start = time.monotonic()
 
+        # Unset CLAUDECODE to avoid "nested session" detection in child processes
+        clean_env = {**env, "CLAUDECODE": ""}
         options = ClaudeCodeOptions(
             model=model,
             max_turns=max_turns,
@@ -147,7 +149,7 @@ class SessionManager:
             system_prompt=system_prompt,
             permission_mode=permission_mode,
             disallowed_tools=disallowed_tools or [],
-            env=env,
+            env=clean_env,
         )
 
         ticket_logger.info("Starting Claude Code session (model=%s, max_turns=%s)", model, max_turns)

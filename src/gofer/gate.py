@@ -141,7 +141,7 @@ async def _check_claude_judgment(
         cwd=worktree_path,
         system_prompt=_GATE_SYSTEM_PROMPT,
         permission_mode="plan",
-        env={"ANTHROPIC_API_KEY": api_key},
+        env={"ANTHROPIC_API_KEY": api_key, "CLAUDECODE": ""},
     )
 
     response_text = ""

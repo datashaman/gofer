@@ -24,9 +24,16 @@ class RepoMapping(BaseModel):
     repo: str
     branch: str = "main"
 
+    @model_validator(mode="before")
+    @classmethod
+    def _expand_repo_path(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "repo" in data:
+            data["repo"] = str(Path(data["repo"]).expanduser())
+        return data
+
 
 class ProjectConfig(BaseModel):
-    default: list[RepoMapping]
+    default: list[RepoMapping] = Field(default_factory=list)
     components: dict[str, list[RepoMapping]] = Field(default_factory=dict)
 
     @model_validator(mode="before")

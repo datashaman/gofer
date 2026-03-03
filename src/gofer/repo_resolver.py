@@ -38,4 +38,12 @@ def resolve_repo(
         )
         return project_config.components[component]
 
+    if not project_config.default:
+        logger.warning(
+            "No component match and no default for project %s — cannot handle %s",
+            project,
+            issue_key,
+        )
+        return None
+
     return project_config.default

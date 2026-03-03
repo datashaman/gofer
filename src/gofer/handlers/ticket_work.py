@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections import OrderedDict
+from typing import TYPE_CHECKING
 
 from ..approval import prompt_approval
 from ..config import RepoMapping, Settings
@@ -18,6 +19,9 @@ from ..slack_client import (
     post_slack,
 )
 from ..worktree import create_worktree
+
+if TYPE_CHECKING:
+    from ..progress import ProgressTracker
 
 logger = logging.getLogger(__name__)
 
@@ -68,30 +72,52 @@ def _session_key(issue_key: str, repo: RepoMapping) -> str:
 
 
 @handles("assigned_to_me", "status_changed")
-async def handle_ticket_work(event: JiraEvent, settings: Settings) -> None:
+async def handle_ticket_work(
+    event: JiraEvent,
+    settings: Settings,
+    *,
+    tracker: ProgressTracker | None = None,
+) -> None:
     """Handle ticket assignment and status changes — resolve repos, create worktrees, spawn Claude sessions."""
     session_manager = get_session_manager()
     if session_manager is None:
         logger.error("Session manager not initialized — skipping %s", event.issue_key)
+        if tracker is not None:
+            tracker.update(event.issue_key, "failed", "session manager not initialized")
         return
 
     # Resolve repo mapping(s) from project key + component
     candidates = resolve_repo(settings, event.project, event.component, event.issue_key)
     if candidates is None:
+        if tracker is not None:
+            tracker.update(event.issue_key, "skipped", "no repo mapping")
         return
+
+    if tracker is not None:
+        tracker.update(event.issue_key, "resolving")
 
     # Select relevant repos (single candidate skips Claude call)
     selected = await select_repos(candidates, event, settings)
     if not selected:
         logger.warning("No repos selected for %s — skipping", event.issue_key)
+        if tracker is not None:
+            tracker.update(event.issue_key, "skipped", "no repos selected")
         return
 
+    if tracker is not None:
+        repo_names = ", ".join(r.repo.split("/")[-1] for r in selected)
+        tracker.update(event.issue_key, "resolving", repo_names)
+
     for repo_mapping in selected:
-        await _work_repo(event, repo_mapping, settings)
+        await _work_repo(event, repo_mapping, settings, tracker=tracker)
 
 
 async def _work_repo(
-    event: JiraEvent, repo_mapping: RepoMapping, settings: Settings,
+    event: JiraEvent,
+    repo_mapping: RepoMapping,
+    settings: Settings,
+    *,
+    tracker: ProgressTracker | None = None,
 ) -> None:
     """Run the full worktree → gate → session → slack flow for a single repo."""
     session_manager = get_session_manager()
@@ -102,10 +128,14 @@ async def _work_repo(
 
     if session_manager.is_active(key):
         logger.info("Session already active for %s — skipping", key)
+        if tracker is not None:
+            tracker.update(event.issue_key, "skipped", "already active")
         return
 
     if key in _completed:
         logger.info("Session already completed for %s — skipping", key)
+        if tracker is not None:
+            tracker.update(event.issue_key, "skipped", "already completed")
         return
 
     logger.info(
@@ -127,11 +157,18 @@ async def _work_repo(
         )
     except Exception:
         logger.exception("Failed to create worktree for %s in %s", event.issue_key, repo_mapping.repo)
+        if tracker is not None:
+            tracker.update(event.issue_key, "failed", "worktree creation failed")
         return
 
     # Complexity gate
+    if tracker is not None:
+        tracker.update(event.issue_key, "gating")
+
     gate_result = await check_gate(event, str(worktree.worktree_path), settings)
     if gate_result.needs_approval:
+        if tracker is not None:
+            tracker.update(event.issue_key, "waiting_approval", f"complexity={gate_result.complexity}")
         await post_slack(
             settings,
             format_approval_needed(
@@ -144,9 +181,14 @@ async def _work_repo(
         approved = await prompt_approval(event.issue_key, gate_result, settings)
         if not approved:
             logger.info("Operator rejected %s — skipping session", event.issue_key)
+            if tracker is not None:
+                tracker.update(event.issue_key, "skipped", "rejected")
             return
 
     # Run Claude Code session
+    if tracker is not None:
+        tracker.update(event.issue_key, "working", repo_mapping.repo.split("/")[-1])
+
     result: SessionResult = await session_manager.run_session(
         issue_key=key,
         prompt=_build_prompt(event),
@@ -167,12 +209,16 @@ async def _work_repo(
             result.num_turns,
             result.cost_usd or 0,
         )
+        if tracker is not None:
+            tracker.update(event.issue_key, "done", f"turns={result.num_turns} cost=${result.cost_usd or 0:.2f}")
     else:
         logger.error(
             "Session for %s failed: %s",
             key,
             result.error,
         )
+        if tracker is not None:
+            tracker.update(event.issue_key, "failed", result.error or "unknown error")
 
     await post_slack(
         settings,
