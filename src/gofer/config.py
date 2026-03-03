@@ -32,7 +32,7 @@ class ProjectConfig(BaseModel):
 
 class SlackConfig(BaseModel):
     webhook_url: str
-    channel: str = "#jira-agent"
+    channel: str = "#gofer"
 
 
 class ApprovalsConfig(BaseModel):

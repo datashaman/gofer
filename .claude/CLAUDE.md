@@ -1,21 +1,21 @@
-# jira-agent
+# gofer
 
-Python project using `uv` for package management. Source lives in `src/jira_agent/`.
+Python project using `uv` for package management. Source lives in `src/gofer/`.
 
 ## Commands
 
 - `uv sync` — install dependencies
-- `uv run jira-agent --help` — CLI usage
-- `uv run jira-agent --config config.yaml` — start polling
-- `uv run jira-agent run --interval 30` — start polling with interval override
-- `uv run jira-agent --log-file /path/to/file.log` — log to file (daemon mode)
-- `uv run jira-agent approve PROJ-123` — approve a pending ticket
-- `uv run jira-agent reject PROJ-123` — reject a pending ticket
+- `uv run gofer --help` — CLI usage
+- `uv run gofer --config config.yaml` — start polling
+- `uv run gofer run --interval 30` — start polling with interval override
+- `uv run gofer --log-file /path/to/file.log` — log to file (daemon mode)
+- `uv run gofer approve PROJ-123` — approve a pending ticket
+- `uv run gofer reject PROJ-123` — reject a pending ticket
 
 ## Project layout
 
 ```
-src/jira_agent/
+src/gofer/
 ├── main.py          # Entry point, poll loop, CLI (run/approve/reject subcommands)
 ├── config.py        # EnvSettings (pydantic-settings) + YamlConfig → Settings
 ├── models.py        # JiraEvent, GateResult (Pydantic v2)
@@ -55,4 +55,4 @@ src/jira_agent/
 - Pydantic v2 models with `BaseModel`
 - Type hints everywhere
 - Logging via `logging.getLogger(__name__)`; PID included in log format
-- No test framework yet — verify manually with `uv run jira-agent`
+- No test framework yet — verify manually with `uv run gofer`

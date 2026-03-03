@@ -224,6 +224,31 @@ wheels = [
 ]
 
 [[package]]
+name = "gofer"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "claude-code-sdk" },
+    { name = "httpx" },
+    { name = "jira" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "python-dotenv" },
+    { name = "pyyaml" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "claude-code-sdk", specifier = ">=0.0.25" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "jira", specifier = ">=3.10.5" },
+    { name = "pydantic", specifier = ">=2.0" },
+    { name = "pydantic-settings", specifier = ">=2.0" },
+    { name = "python-dotenv", specifier = ">=1.2.2" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
+]
+
+[[package]]
 name = "h11"
 version = "0.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -293,31 +318,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/65/73/ee4daa7cf4eea457180de0ea78b730b44bb5ad2829dae49cf708a1460819/jira-3.10.5.tar.gz", hash = "sha256:2d09ae3bf4741a2787dd889dfea5926a5d509aac3b28ab3b98c098709e6ee72d", size = 105870, upload-time = "2025-07-28T12:18:22.796Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/89/57/ad078d7379e390798559446607e413fc953c7510711462ab34194dba5924/jira-3.10.5-py3-none-any.whl", hash = "sha256:d4da1385c924ee693d6cc9838e56a34e31d74f0d6899934ef35bbd0d2d33997f", size = 79250, upload-time = "2025-07-28T12:18:21.368Z" },
-]
-
-[[package]]
-name = "jira-agent"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "claude-code-sdk" },
-    { name = "httpx" },
-    { name = "jira" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "python-dotenv" },
-    { name = "pyyaml" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "claude-code-sdk", specifier = ">=0.0.25" },
-    { name = "httpx", specifier = ">=0.27" },
-    { name = "jira", specifier = ">=3.10.5" },
-    { name = "pydantic", specifier = ">=2.0" },
-    { name = "pydantic-settings", specifier = ">=2.0" },
-    { name = "python-dotenv", specifier = ">=1.2.2" },
-    { name = "pyyaml", specifier = ">=6.0.3" },
 ]
 
 [[package]]

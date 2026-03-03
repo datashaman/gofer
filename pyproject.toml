@@ -1,5 +1,5 @@
 [project]
-name = "jira-agent"
+name = "gofer"
 version = "0.1.0"
 description = "Polls Jira for ticket events and dispatches AI-powered handlers"
 readme = "README.md"
@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.scripts]
-jira-agent = "jira_agent.main:main"
+gofer = "gofer.main:main"
 
 [build-system]
 requires = ["uv_build>=0.8.17,<0.9.0"]

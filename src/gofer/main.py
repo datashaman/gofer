@@ -19,7 +19,7 @@ from .session import init_session_manager
 # Import handlers to register them via @handles decorators
 from . import handlers  # noqa: F401
 
-logger = logging.getLogger("jira_agent")
+logger = logging.getLogger("gofer")
 
 _shutdown: asyncio.Event | None = None
 
@@ -48,7 +48,7 @@ async def run_loop(settings_args: argparse.Namespace) -> None:
     interval = settings.config.poll_interval
 
     logger.info(
-        "Starting jira-agent: polling %s every %ds",
+        "Starting gofer: polling %s every %ds",
         settings.env.jira_url,
         interval,
     )
@@ -88,7 +88,7 @@ def _setup_logging(args: argparse.Namespace) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        prog="jira-agent",
+        prog="gofer",
         description="Polls Jira for ticket events and dispatches handlers.",
     )
     parser.add_argument(

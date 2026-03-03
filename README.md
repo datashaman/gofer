@@ -1,4 +1,4 @@
-# jira-agent
+# gofer
 
 Polls Jira for ticket events targeting you (assignments, mentions, comments) and autonomously handles them using Claude Code sessions in isolated git worktrees. Ticket work produces branches and PRs. Mentions and comments get replies posted back to Jira.
 
@@ -9,7 +9,7 @@ Polls Jira for ticket events targeting you (assignments, mentions, comments) and
 The agent authenticates to Jira via [API tokens](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/) (basic auth).
 
 1. Go to https://id.atlassian.com/manage-profile/security/api-tokens
-2. Click **Create API token**, give it a label (e.g. `jira-agent`), and copy the token.
+2. Click **Create API token**, give it a label (e.g. `gofer`), and copy the token.
 3. The Jira account needs permission to:
    - **Browse projects** — the agent polls with `assignee = currentUser()`
    - **Add comments** — mention/comment handlers reply to tickets
@@ -100,7 +100,7 @@ concurrency:
 # Optional — omit to disable Slack notifications
 slack:
   webhook_url: "https://hooks.slack.com/services/T000/B000/xxxx"
-  channel: "#jira-agent"
+  channel: "#gofer"
 
 approvals:
   pending_file: pending_approvals.json
@@ -113,40 +113,40 @@ Projects use a `default` repo mapping with optional `components` for component-l
 
 ```bash
 # Start polling (default subcommand)
-uv run jira-agent --config config.yaml
+uv run gofer --config config.yaml
 
 # Override poll interval
-uv run jira-agent run --interval 30
+uv run gofer run --interval 30
 
 # Verbose logging
-uv run jira-agent -v
+uv run gofer -v
 
 # Log to file (for daemon mode)
-uv run jira-agent --log-file /path/to/jira-agent.log
+uv run gofer --log-file /path/to/gofer.log
 
 # Approve a pending ticket (daemon must be running)
-uv run jira-agent approve PROJ-123
+uv run gofer approve PROJ-123
 
 # Reject a pending ticket
-uv run jira-agent reject PROJ-123
+uv run gofer reject PROJ-123
 ```
 
 Stop with `Ctrl+C` — the agent shuts down gracefully, cancelling active sessions.
 
 ### Running as a launchd daemon
 
-A template plist is provided at `com.datashaman.jira-agent.plist`. To install:
+A template plist is provided at `com.datashaman.gofer.plist`. To install:
 
 ```bash
 # Edit the plist — replace /Users/YOU with your home directory
-cp com.datashaman.jira-agent.plist ~/Library/LaunchAgents/
-mkdir -p ~/Library/Logs/jira-agent
+cp com.datashaman.gofer.plist ~/Library/LaunchAgents/
+mkdir -p ~/Library/Logs/gofer
 
 # Load and start
-launchctl load ~/Library/LaunchAgents/com.datashaman.jira-agent.plist
+launchctl load ~/Library/LaunchAgents/com.datashaman.gofer.plist
 
 # Stop
-launchctl unload ~/Library/LaunchAgents/com.datashaman.jira-agent.plist
+launchctl unload ~/Library/LaunchAgents/com.datashaman.gofer.plist
 ```
 
 ## Architecture
@@ -202,8 +202,8 @@ If heuristics flag the ticket, Stage 2 is skipped (saves API cost).
 When approval is required, the agent writes an entry to `pending_approvals.json` and polls for a decision. In daemon mode (no interactive terminal), use the CLI subcommands:
 
 ```bash
-uv run jira-agent approve PROJ-123
-uv run jira-agent reject PROJ-123
+uv run gofer approve PROJ-123
+uv run gofer reject PROJ-123
 ```
 
 Approvals time out after `approvals.timeout` seconds (default: 3600) and auto-reject.
@@ -223,7 +223,7 @@ All handlers skip comments authored by the agent's own `JIRA_EMAIL` to prevent i
 ### Project structure
 
 ```
-src/jira_agent/
+src/gofer/
 ├── main.py          # Entry point: poll loop, signal handling, CLI (run/approve/reject)
 ├── config.py        # .env (secrets) + config.yaml (mappings) -> Settings
 ├── models.py        # JiraEvent, GateResult (Pydantic v2)

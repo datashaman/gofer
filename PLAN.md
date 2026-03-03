@@ -1,4 +1,4 @@
-# jira-agent
+# gofer
 
 ## Objective
 
@@ -43,11 +43,11 @@ Two-stage gate determines whether plan approval is required:
 ## Structure
 
 ```
-jira-agent/
+gofer/
 ├── pyproject.toml
 ├── .env.example
 ├── config.yaml                 # Jira project → repo mapping, heuristic thresholds
-├── jira_agent/
+├── gofer/
 │   ├── __init__.py
 │   ├── main.py                 # Entry point: poll loop, concurrency control, shutdown
 │   ├── config.py               # Load .env + config.yaml, settings model
@@ -71,7 +71,7 @@ jira-agent/
 ### 1. `dispatcher.py` — Decorator-based event routing
 
 ```python
-from jira_agent.events import JiraEvent
+from gofer.events import JiraEvent
 
 _handlers: dict[str, Callable] = {}
 
@@ -177,7 +177,7 @@ concurrency:
 
 ```toml
 [project]
-name = "jira-agent"
+name = "gofer"
 requires-python = ">=3.11"
 dependencies = [
     "jira",

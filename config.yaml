@@ -1,4 +1,4 @@
-# Jira Agent Configuration
+# Gofer Configuration
 
 # Polling settings
 poll_interval: 60  # seconds between polls
@@ -32,7 +32,7 @@ concurrency:
 # Optional — omit entire block to disable Slack
 # slack:
 #   webhook_url: "https://hooks.slack.com/services/T000/B000/xxxx"
-#   channel: "#jira-agent"
+#   channel: "#gofer"
 
 # Approval settings (file-based flow for daemon mode)
 approvals:

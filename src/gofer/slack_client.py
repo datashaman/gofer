@@ -52,6 +52,6 @@ def format_approval_needed(
     parts = [
         f"*{issue_key}* needs approval (complexity={complexity}, risk={risk})",
         "Reasons: " + "; ".join(reasons) if reasons else "",
-        f"Run `jira-agent approve {issue_key}` to approve or `jira-agent reject {issue_key}` to reject.",
+        f"Run `gofer approve {issue_key}` to approve or `gofer reject {issue_key}` to reject.",
     ]
     return "\n".join(p for p in parts if p)

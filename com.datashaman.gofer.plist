@@ -3,35 +3,35 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.datashaman.jira-agent</string>
+    <string>com.datashaman.gofer</string>
 
     <key>ProgramArguments</key>
     <array>
-        <!-- Replace with the absolute path to your uv binary -->
-        <string>/Users/YOU/.local/bin/uv</string>
+        <!-- Replace these paths before installing -->
+        <string>UV_BINARY</string>
         <string>run</string>
         <string>--project</string>
-        <string>/Users/YOU/Projects/datashaman/jira-agent</string>
-        <string>jira-agent</string>
+        <string>PROJECT_DIR</string>
+        <string>gofer</string>
         <string>--config</string>
-        <string>/Users/YOU/Projects/datashaman/jira-agent/config.yaml</string>
+        <string>PROJECT_DIR/config.yaml</string>
         <string>--log-file</string>
-        <string>/Users/YOU/Library/Logs/jira-agent/jira-agent.log</string>
+        <string>LOG_DIR/gofer.log</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/YOU/Projects/datashaman/jira-agent</string>
+    <string>PROJECT_DIR</string>
 
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/usr/local/bin:/usr/bin:/bin:/Users/YOU/.local/bin</string>
+        <string>/usr/local/bin:/usr/bin:/bin</string>
     </dict>
 
     <key>StandardOutPath</key>
-    <string>/Users/YOU/Library/Logs/jira-agent/stdout.log</string>
+    <string>LOG_DIR/stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/YOU/Library/Logs/jira-agent/stderr.log</string>
+    <string>LOG_DIR/stderr.log</string>
 
     <key>KeepAlive</key>
     <true/>

@@ -130,7 +130,7 @@ class SessionManager:
         env: dict[str, str],
     ) -> SessionResult:
         """Build options, stream query(), and collect results."""
-        ticket_logger = logging.getLogger(f"jira_agent.session.{issue_key}")
+        ticket_logger = logging.getLogger(f"gofer.session.{issue_key}")
         start = time.monotonic()
 
         options = ClaudeCodeOptions(

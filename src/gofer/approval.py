@@ -71,7 +71,7 @@ async def prompt_approval(
     _write_pending(path, entries)
 
     logger.info(
-        "Approval needed for %s — run 'jira-agent approve %s' to approve",
+        "Approval needed for %s — run 'gofer approve %s' to approve",
         issue_key,
         issue_key,
     )
