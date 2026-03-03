@@ -4,7 +4,7 @@ import logging
 from collections import OrderedDict
 from typing import TYPE_CHECKING
 
-from ..approval import prompt_approval
+from ..approval import prompt_approval, prompt_resume
 from ..config import RepoMapping, Settings
 from ..dispatcher import handles
 from ..events import sanitize_log
@@ -18,7 +18,7 @@ from ..slack_client import (
     format_session_result,
     post_slack,
 )
-from ..worktree import create_worktree
+from ..worktree import ExistingWork, create_worktree, detect_existing_work, remove_worktree
 
 if TYPE_CHECKING:
     from ..progress import ProgressTracker
@@ -52,7 +52,32 @@ def _build_system_prompt(event: JiraEvent) -> str:
     )
 
 
-def _build_prompt(event: JiraEvent) -> str:
+def _build_prompt(event: JiraEvent, existing_work: ExistingWork | None = None) -> str:
+    if existing_work and existing_work.has_prior_work:
+        parts = []
+        if existing_work.commits:
+            commit_list = "\n".join(f"  - {c}" for c in existing_work.commits)
+            parts.append(f"Commits on this branch:\n{commit_list}")
+        if existing_work.pr_url:
+            parts.append(f"Open PR: {existing_work.pr_url}")
+        if existing_work.has_uncommitted:
+            parts.append("There are uncommitted changes in the worktree.")
+
+        prior_detail = "\n".join(parts)
+
+        return (
+            f"Continue working on Jira ticket {event.issue_key}.\n\n"
+            f"Prior work exists on this branch:\n{prior_detail}\n\n"
+            "Steps:\n"
+            "1. Review existing commits and any open PR to understand what's been done.\n"
+            "2. Compare against ticket requirements — determine what remains.\n"
+            "3. Implement remaining changes.\n"
+            "4. Commit your changes with a clear commit message referencing the ticket key.\n"
+            "5. Push your branch and update or create a pull request.\n\n"
+            "Work autonomously. If anything is unclear from the ticket description, "
+            "make reasonable assumptions and document them in the PR description."
+        )
+
     return (
         f"Implement the work described in Jira ticket {event.issue_key}.\n\n"
         "Steps:\n"
@@ -161,6 +186,39 @@ async def _work_repo(
             tracker.update(event.issue_key, "failed", "worktree creation failed")
         return
 
+    # Detect existing work on the branch
+    existing: ExistingWork | None = await detect_existing_work(worktree)
+    if existing.has_prior_work:
+        summary_parts = []
+        if existing.commits:
+            summary_parts.append(f"{len(existing.commits)} commit(s)")
+        if existing.pr_url:
+            summary_parts.append("PR open")
+        if existing.has_uncommitted:
+            summary_parts.append("uncommitted changes")
+        detail = "; ".join(summary_parts)
+
+        if tracker is not None:
+            tracker.update(event.issue_key, "waiting_approval", f"existing work: {detail}")
+
+        approved = await prompt_resume(event.issue_key, existing, settings)
+
+        if not approved:
+            # Start fresh
+            await remove_worktree(worktree)
+            worktree = await create_worktree(
+                repo_path=repo_mapping.repo,
+                issue_key=event.issue_key,
+                base_branch=repo_mapping.branch,
+                force_new=True,
+            )
+            existing = None
+        else:
+            if tracker is not None:
+                tracker.update(event.issue_key, "waiting_approval", "resuming")
+    else:
+        existing = None
+
     # Complexity gate
     if tracker is not None:
         tracker.update(event.issue_key, "gating")
@@ -197,7 +255,7 @@ async def _work_repo(
 
     result: SessionResult = await session_manager.run_session(
         issue_key=key,
-        prompt=_build_prompt(event),
+        prompt=_build_prompt(event, existing_work=existing),
         cwd=worktree.worktree_path,
         system_prompt=_build_system_prompt(event),
         model="claude-sonnet-4-6",

@@ -13,6 +13,7 @@ from typing import Any, Iterator
 
 from .config import Settings
 from .models import GateResult
+from .worktree import ExistingWork
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +129,84 @@ async def prompt_approval(
         logger.info("Operator rejected %s", issue_key)
     else:
         logger.info("Approval timed out for %s after %ds", issue_key, timeout)
+
+    return False
+
+
+async def prompt_resume(
+    issue_key: str,
+    existing_work: ExistingWork,
+    settings: Settings,
+) -> bool:
+    """Prompt operator to resume on existing branch or start fresh.
+
+    Returns True if the operator approves (resume), False if rejected (start fresh)
+    or timed out.
+    """
+    path = _pending_path(settings)
+    timeout = settings.config.approvals.timeout
+
+    # Build human-readable summary
+    parts: list[str] = []
+    if existing_work.commits:
+        parts.append(f"{len(existing_work.commits)} commit(s)")
+    if existing_work.pr_url:
+        parts.append("PR open")
+    if existing_work.has_uncommitted:
+        parts.append("uncommitted changes")
+    summary = "; ".join(parts) or "remote branch exists"
+
+    with _file_lock(path):
+        entries = _read_pending(path)
+        entry = {
+            "issue_key": issue_key,
+            "type": "resume",
+            "summary": summary,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "decision": None,
+        }
+        entries.append(entry)
+        _write_pending(path, entries)
+
+    logger.info(
+        "Existing work detected for %s (%s) — run 'gofer approve %s' to resume or 'gofer reject %s' to start fresh",
+        issue_key,
+        summary,
+        issue_key,
+        issue_key,
+    )
+
+    # Poll for decision
+    elapsed = 0
+    poll_interval = 5
+    decision = None
+
+    while elapsed < timeout:
+        await asyncio.sleep(poll_interval)
+        elapsed += poll_interval
+
+        current = _read_pending(path)
+        for e in current:
+            if e["issue_key"] == issue_key and e["decision"] is not None:
+                decision = e["decision"]
+                break
+        if decision is not None:
+            break
+
+    # Clean up entry
+    with _file_lock(path):
+        current = _read_pending(path)
+        remaining = [e for e in current if e["issue_key"] != issue_key]
+        _write_pending(path, remaining)
+
+    if decision == "approved":
+        logger.info("Operator approved resume for %s", issue_key)
+        return True
+
+    if decision == "rejected":
+        logger.info("Operator rejected resume for %s — will start fresh", issue_key)
+    else:
+        logger.info("Resume prompt timed out for %s after %ds — starting fresh", issue_key, timeout)
 
     return False
 
