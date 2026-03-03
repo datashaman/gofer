@@ -170,6 +170,12 @@ async def detect_existing_work(worktree: Worktree) -> ExistingWork:
     """Detect prior work on a worktree branch. All checks are best-effort."""
     cwd = worktree.worktree_path
 
+    # Fetch so origin/{base_branch} is current
+    try:
+        await _run_git("fetch", "origin", cwd=cwd)
+    except RuntimeError:
+        logger.debug("Could not fetch origin in worktree for %s", worktree.branch)
+
     # Commits since base branch
     commits: list[str] = []
     try:
@@ -212,9 +218,19 @@ async def detect_existing_work(worktree: Worktree) -> ExistingWork:
     except RuntimeError:
         logger.debug("Could not check PR status for %s", worktree.branch)
 
-    return ExistingWork(
+    result = ExistingWork(
         commits=commits,
         has_uncommitted=has_uncommitted,
         has_remote_branch=has_remote_branch,
         pr_url=pr_url,
     )
+    logger.info(
+        "detect_existing_work(%s): commits=%d uncommitted=%s remote=%s pr=%s prior_work=%s",
+        worktree.branch,
+        len(commits),
+        has_uncommitted,
+        has_remote_branch,
+        pr_url,
+        result.has_prior_work,
+    )
+    return result
