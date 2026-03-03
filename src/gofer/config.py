@@ -92,8 +92,7 @@ class GateConfig(BaseModel):
 
 
 class BatchConfig(BaseModel):
-    status_categories: list[str] = Field(default_factory=lambda: ["To Do"])
-    exclude_statuses: list[str] = Field(default_factory=lambda: ["Blocked"])
+    statuses: list[str] = Field(default_factory=lambda: ["To Do"])
 
 
 class ConcurrencyConfig(BaseModel):

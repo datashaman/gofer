@@ -159,7 +159,7 @@ uv run gofer do PROJ --all-statuses
 uv run gofer do PROJ --dry-run
 ```
 
-Status filtering is configured in `config.yaml` under the `batch` section. `status_categories` defaults to `["To Do"]` and `exclude_statuses` defaults to `["Blocked"]`. The `--status` CLI flag overrides `status_categories`; excluded statuses always apply.
+Status filtering is configured in `config.yaml` under the `batch` section. `statuses` defaults to `["To Do"]` — only tickets in these exact statuses are included. The `--status` CLI flag overrides the config value.
 
 In a TTY, `gofer do` displays a Rich live table showing per-ticket progress. Log output is coordinated through the same Rich console so logs appear above the table without corrupting the display. In non-TTY mode (e.g. piped to a file), plain status lines are printed to stderr instead.
 

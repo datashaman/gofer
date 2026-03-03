@@ -32,10 +32,8 @@ projects:
 
 # Batch mode defaults (gofer do)
 batch:
-  status_categories:              # default status category filter
+  statuses:                       # only work tickets in these statuses
     - "To Do"
-  exclude_statuses:               # statuses excluded from batch runs
-    - "Blocked"
 
 # Gate thresholds for autonomous work
 gates:

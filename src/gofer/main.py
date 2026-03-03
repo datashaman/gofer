@@ -90,18 +90,12 @@ async def run_do(args: argparse.Namespace) -> None:
         if args.all_statuses:
             status_filter = "AND statusCategory != Done"
         else:
-            categories = args.status or settings.config.batch.status_categories
-            if len(categories) == 1:
-                status_filter = f'AND statusCategory = "{categories[0]}"'
+            statuses = args.status or settings.config.batch.statuses
+            if len(statuses) == 1:
+                status_filter = f'AND status = "{statuses[0]}"'
             else:
-                cat_list = ", ".join(f'"{c}"' for c in categories)
-                status_filter = f"AND statusCategory IN ({cat_list})"
-
-        # Always apply exclude_statuses from config
-        excludes = settings.config.batch.exclude_statuses
-        if excludes:
-            exclude_clauses = " AND ".join(f'status != "{s}"' for s in excludes)
-            status_filter += f" AND {exclude_clauses}"
+                status_list = ", ".join(f'"{s}"' for s in statuses)
+                status_filter = f"AND status IN ({status_list})"
 
         jql = (
             f'assignee = currentUser() AND project = "{args.project}" '
