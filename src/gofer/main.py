@@ -5,6 +5,7 @@ import asyncio
 import logging
 import signal
 import sys
+from pathlib import Path
 from types import FrameType
 
 from pydantic import ValidationError
@@ -86,10 +87,14 @@ async def run_do(args: argparse.Namespace) -> None:
     if args.jql:
         jql = args.jql
     elif args.project:
+        if args.all_statuses:
+            status_filter = "AND statusCategory != Done"
+        else:
+            status_filter = f'AND statusCategory = "{args.status}"'
         jql = (
             f'assignee = currentUser() AND project = "{args.project}" '
             f"AND sprint in openSprints() "
-            f"AND statusCategory != Done ORDER BY priority DESC"
+            f"{status_filter} ORDER BY priority DESC"
         )
     else:
         print("Error: provide a project key or --jql", file=sys.stderr)
@@ -128,17 +133,23 @@ async def run_do(args: argparse.Namespace) -> None:
             print(f"  FAILED {r.issue_key}: {r.error}")
 
 
+def _default_log_path() -> Path:
+    log_dir = Path.home() / ".local" / "share" / "gofer"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir / "gofer.log"
+
+
 def _setup_logging(args: argparse.Namespace) -> None:
     log_level = logging.DEBUG if args.verbose else logging.INFO
     log_format = "%(asctime)s %(process)d %(levelname)-8s %(name)s: %(message)s"
-    log_handlers: list[logging.Handler] = [logging.StreamHandler()]
-    if args.log_file:
-        log_handlers.append(logging.FileHandler(args.log_file))
+    log_path = Path(args.log_file) if args.log_file else _default_log_path()
+    log_handlers: list[logging.Handler] = [logging.FileHandler(log_path)]
     logging.basicConfig(
         level=log_level,
         format=log_format,
         handlers=log_handlers,
     )
+    logger.info("Logging to %s", log_path)
 
 
 def main() -> None:
@@ -159,7 +170,7 @@ def main() -> None:
     parser.add_argument(
         "--log-file",
         default=None,
-        help="Path to log file (in addition to stderr)",
+        help="Path to log file (default: ~/.local/share/gofer/gofer.log)",
     )
 
     subparsers = parser.add_subparsers(dest="command")
@@ -199,6 +210,16 @@ def main() -> None:
         type=int,
         default=None,
         help="Override max parallel sessions",
+    )
+    do_parser.add_argument(
+        "--status",
+        default="To Do",
+        help='Filter by Jira status category (default: "To Do")',
+    )
+    do_parser.add_argument(
+        "--all-statuses",
+        action="store_true",
+        help="Include all non-Done status categories",
     )
     do_parser.add_argument(
         "--dry-run",

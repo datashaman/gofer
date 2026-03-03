@@ -7,7 +7,6 @@ from typing import Literal
 
 from rich.console import Console
 from rich.live import Live
-from rich.logging import RichHandler
 from rich.table import Table
 
 from .models import JiraEvent
@@ -63,7 +62,6 @@ class ProgressTracker:
         self._start_time = time.monotonic()
         self._live: Live | None = None
         self._original_handlers: list[logging.Handler] = []
-        self._rich_handler: RichHandler | None = None
 
         for event in events:
             summary = event.summary
@@ -119,22 +117,20 @@ class ProgressTracker:
         return table
 
     def _install_rich_logging(self) -> None:
-        """Replace stderr StreamHandlers with a RichHandler sharing our Console."""
+        """Remove any stderr StreamHandlers so they don't corrupt the Live display.
+
+        Logs go to the file handler only while the progress table is active.
+        """
         root = logging.getLogger()
         self._original_handlers = []
         for handler in list(root.handlers):
             if isinstance(handler, logging.StreamHandler) and not isinstance(handler, logging.FileHandler):
                 self._original_handlers.append(handler)
                 root.removeHandler(handler)
-        self._rich_handler = RichHandler(console=_console, markup=False)
-        root.addHandler(self._rich_handler)
 
     def _uninstall_rich_logging(self) -> None:
-        """Restore original StreamHandlers and remove the RichHandler."""
+        """Restore any stderr StreamHandlers that were removed."""
         root = logging.getLogger()
-        if self._rich_handler is not None:
-            root.removeHandler(self._rich_handler)
-            self._rich_handler = None
         for handler in self._original_handlers:
             root.addHandler(handler)
         self._original_handlers = []
