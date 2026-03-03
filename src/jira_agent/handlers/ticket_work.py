@@ -7,24 +7,12 @@ from ..config import Settings
 from ..dispatcher import handles
 from ..gate import check_gate
 from ..models import JiraEvent
-from ..session import SessionManager, SessionResult
+from ..session import SessionResult, get_session_manager
 from ..worktree import create_worktree
 
 logger = logging.getLogger(__name__)
 
-_session_manager: SessionManager | None = None
 _completed: set[str] = set()
-
-
-def init_session_manager(settings: Settings) -> SessionManager:
-    """Initialize the module-level session manager. Called once from main.py."""
-    global _session_manager
-    concurrency = settings.config.concurrency
-    _session_manager = SessionManager(
-        max_parallel=concurrency.max_parallel_sessions,
-        session_timeout=concurrency.session_timeout,
-    )
-    return _session_manager
 
 
 def _build_system_prompt(event: JiraEvent) -> str:
@@ -60,11 +48,12 @@ def _build_prompt(event: JiraEvent) -> str:
 @handles("assigned_to_me", "status_changed")
 async def handle_ticket_work(event: JiraEvent, settings: Settings) -> None:
     """Handle ticket assignment and status changes — resolve repo, create worktree, spawn Claude session."""
-    if _session_manager is None:
+    session_manager = get_session_manager()
+    if session_manager is None:
         logger.error("Session manager not initialized — skipping %s", event.issue_key)
         return
 
-    if _session_manager.is_active(event.issue_key):
+    if session_manager.is_active(event.issue_key):
         logger.info("Session already active for %s — skipping", event.issue_key)
         return
 
@@ -112,7 +101,7 @@ async def handle_ticket_work(event: JiraEvent, settings: Settings) -> None:
             return
 
     # Run Claude Code session
-    result: SessionResult = await _session_manager.run_session(
+    result: SessionResult = await session_manager.run_session(
         issue_key=event.issue_key,
         prompt=_build_prompt(event),
         cwd=worktree.worktree_path,

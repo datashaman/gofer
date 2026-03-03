@@ -5,6 +5,7 @@ import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from claude_code_sdk import (
     AssistantMessage,
@@ -15,6 +16,9 @@ from claude_code_sdk import (
     ToolUseBlock,
     query,
 )
+
+if TYPE_CHECKING:
+    from .config import Settings
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +32,7 @@ class SessionResult:
     num_turns: int = 0
     session_id: str | None = None
     error: str | None = None
+    response_text: str | None = None
 
 
 class SessionManager:
@@ -140,9 +145,18 @@ class SessionManager:
         ticket_logger.info("Starting Claude Code session (model=%s, max_turns=%s)", model, max_turns)
 
         result = SessionResult(issue_key=issue_key, success=False)
+        last_assistant_text: str | None = None
 
         async for message in query(prompt=prompt, options=options):
             if isinstance(message, AssistantMessage):
+                # Collect text blocks from each assistant message; keep the latest
+                text_parts = [
+                    block.text
+                    for block in message.content
+                    if isinstance(block, TextBlock)
+                ]
+                if text_parts:
+                    last_assistant_text = "\n".join(text_parts)
                 for block in message.content:
                     if isinstance(block, TextBlock):
                         ticket_logger.info("%s", block.text)
@@ -152,6 +166,10 @@ class SessionManager:
                         ticket_logger.debug("Tool result for %s: %s", block.tool_use_id, _truncate(str(block.content)))
             elif isinstance(message, ResultMessage):
                 elapsed_ms = int((time.monotonic() - start) * 1000)
+                # Use last assistant text, falling back to result text on success
+                response_text = last_assistant_text
+                if response_text is None and not message.is_error and message.result:
+                    response_text = message.result
                 result = SessionResult(
                     issue_key=issue_key,
                     success=not message.is_error,
@@ -160,6 +178,7 @@ class SessionManager:
                     num_turns=message.num_turns,
                     session_id=message.session_id,
                     error=message.result if message.is_error else None,
+                    response_text=response_text,
                 )
                 ticket_logger.info(
                     "Session complete: success=%s, turns=%d, cost=$%.4f, duration=%dms",
@@ -188,3 +207,26 @@ class SessionManager:
 
 def _truncate(s: str, max_len: int = 200) -> str:
     return s[:max_len] + "..." if len(s) > max_len else s
+
+
+# ---------------------------------------------------------------------------
+# Shared singleton
+# ---------------------------------------------------------------------------
+
+_session_manager: SessionManager | None = None
+
+
+def init_session_manager(settings: Settings) -> SessionManager:
+    """Create the module-level session manager. Called once from main.py."""
+    global _session_manager
+    concurrency = settings.config.concurrency
+    _session_manager = SessionManager(
+        max_parallel=concurrency.max_parallel_sessions,
+        session_timeout=concurrency.session_timeout,
+    )
+    return _session_manager
+
+
+def get_session_manager() -> SessionManager | None:
+    """Return the session manager singleton (None if not yet initialized)."""
+    return _session_manager

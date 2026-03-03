@@ -11,8 +11,9 @@ from pydantic import ValidationError
 
 from .config import load_settings
 from .dispatcher import dispatch
-from .handlers.ticket_work import init_session_manager
+from .jira_client import init_jira_client
 from .poller import JiraPoller
+from .session import init_session_manager
 
 # Import handlers to register them via @handles decorators
 from . import handlers  # noqa: F401
@@ -33,7 +34,8 @@ async def run_loop(settings_args: argparse.Namespace) -> None:
     if settings_args.interval:
         settings.config.poll_interval = settings_args.interval
 
-    # Initialize session manager before starting poll loop
+    # Initialize shared singletons before starting poll loop
+    init_jira_client(settings)
     session_mgr = init_session_manager(settings)
     logger.info("Max parallel sessions: %d", settings.config.concurrency.max_parallel_sessions)
 
