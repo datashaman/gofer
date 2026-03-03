@@ -1,0 +1,24 @@
+[project]
+name = "jira-agent"
+version = "0.1.0"
+description = "Polls Jira for ticket events and dispatches AI-powered handlers"
+readme = "README.md"
+authors = [
+    { name = "Marlin Forbes", email = "marlinf@datashaman.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "claude-code-sdk>=0.0.25",
+    "jira>=3.10.5",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "python-dotenv>=1.2.2",
+    "pyyaml>=6.0.3",
+]
+
+[project.scripts]
+jira-agent = "jira_agent.main:main"
+
+[build-system]
+requires = ["uv_build>=0.8.17,<0.9.0"]
+build-backend = "uv_build"

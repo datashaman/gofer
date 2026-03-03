@@ -1,0 +1,22 @@
+# Jira Agent Configuration
+
+# Polling settings
+poll_interval: 60  # seconds between polls
+
+# Project-to-repo mapping
+projects:
+  PROJ:
+    repo: /path/to/repo
+    branch: main
+  # Add more project mappings as needed
+
+# Gate thresholds for autonomous work
+gates:
+  max_complexity: medium    # low, medium, high
+  max_risk: medium          # low, medium, high
+  require_approval_above: medium  # complexity or risk above this triggers approval
+
+# Concurrency settings
+concurrency:
+  max_parallel_sessions: 3
+  session_timeout: 3600  # seconds
