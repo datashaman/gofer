@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 
+from ..approval import prompt_approval
 from ..config import Settings
 from ..dispatcher import handles
+from ..gate import check_gate
 from ..models import JiraEvent
 from ..session import SessionManager, SessionResult
 from ..worktree import create_worktree
@@ -100,6 +102,14 @@ async def handle_ticket_work(event: JiraEvent, settings: Settings) -> None:
     except Exception:
         logger.exception("Failed to create worktree for %s", event.issue_key)
         return
+
+    # Complexity gate
+    gate_result = await check_gate(event, worktree.worktree_path, settings)
+    if gate_result.needs_approval:
+        approved = await prompt_approval(event.issue_key, gate_result)
+        if not approved:
+            logger.info("Operator rejected %s — skipping session", event.issue_key)
+            return
 
     # Run Claude Code session
     result: SessionResult = await _session_manager.run_session(
