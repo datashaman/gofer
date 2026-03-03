@@ -12,13 +12,16 @@ from pydantic import ValidationError
 
 from .approval import _FRESH_SENTINEL, get_pending_branches, set_branch_selection, set_decision
 from .batch import fetch_tickets, run_batch
-from .config import load_settings
-from .progress import ProgressTracker
+from .config import load_settings, save_active_branch
 from .dispatcher import dispatch
 from .events import InvalidIssueKey, build_event_from_issue, validate_issue_key
 from .jira_client import init_jira_client
 from .poller import JiraPoller
+from .progress import ProgressTracker
+from .repo_resolver import resolve_repo
+from .repo_selector import select_repos
 from .session import init_session_manager
+from .worktree import list_remote_branches
 
 # Import handlers to register them via @handles decorators
 from . import handlers  # noqa: F401
@@ -124,6 +127,42 @@ async def run_do(args: argparse.Namespace) -> None:
 
     if args.dry_run:
         return
+
+    # Upfront branch selection — prompt operator for each ticket before batch starts
+    if not args.skip_select:
+        for event in events:
+            if event.issue_key in settings.config.active_branches:
+                continue  # already have a branch selection
+
+            candidates = resolve_repo(settings, event.project, event.component, event.issue_key)
+            if not candidates:
+                continue
+            selected = await select_repos(candidates, event, settings)
+            if not selected:
+                continue
+
+            for repo_mapping in selected:
+                branches = await list_remote_branches(repo_mapping.repo)
+                if not branches:
+                    continue
+
+                # Show ticket info and available branches
+                print(f"\n{event.issue_key}: {event.summary}")
+                print(f"  Repo: {repo_mapping.repo}")
+                ticket_branches = [b for b in branches if event.issue_key.lower() in b.lower()]
+                other_branches = [b for b in branches if b not in ticket_branches][:5]
+                print(f"  {len(branches)} remote branches available:")
+                for b in ticket_branches:
+                    print(f"    * {b}")
+                for b in other_branches:
+                    print(f"      {b}")
+                if len(branches) > len(ticket_branches) + 5:
+                    print(f"      ... and {len(branches) - len(ticket_branches) - 5} more")
+
+                answer = input("  Branch (enter for fresh, or type/paste name): ").strip()
+                if answer:
+                    save_active_branch(settings, event.issue_key, answer)
+                # If empty, no active_branch saved → _work_repo creates fresh
 
     is_tty = sys.stderr.isatty()
     tracker = ProgressTracker(events, use_rich=is_tty)
@@ -239,6 +278,11 @@ def main() -> None:
         "--dry-run",
         action="store_true",
         help="List matching tickets without working them",
+    )
+    do_parser.add_argument(
+        "--skip-select",
+        action="store_true",
+        help="Skip interactive branch selection (use saved branches or start fresh)",
     )
 
     args = parser.parse_args()

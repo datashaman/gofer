@@ -20,6 +20,7 @@ Python project using `uv` for package management. Source lives in `src/gofer/`.
 - `uv run gofer do PROJ --status "To Do" "In Progress"` — override status category filter
 - `uv run gofer do PROJ --all-statuses` — include all non-Done statuses
 - `uv run gofer do PROJ --dry-run` — list matching tickets without working them
+- `uv run gofer do PROJ --skip-select` — skip interactive branch selection (use saved or fresh)
 
 ## Project layout
 
@@ -57,11 +58,11 @@ src/gofer/
 - **Self-reply guards**: All handlers skip comments authored by the agent's own email. Comment handler defers to mention handler when a mention is detected.
 - **Response capture**: `SessionResult.response_text` captures the last assistant message text, used by mention/comment handlers to post replies to Jira.
 - **Repo resolution**: `repo_resolver.resolve_repo()` resolves component → default fallback, returning a `list[RepoMapping]`. `repo_selector.select_repos()` narrows multi-repo candidates via a lightweight Claude call (skipped for single-repo). All handlers use these instead of direct dict lookups.
-- **File-based approval**: `approval.py` writes pending entries to JSON, polls for decisions. CLI `approve`/`reject` subcommands call `set_decision()`. Branch selection uses the same mechanism — `prompt_branch_select()` writes a `branch_select` entry, `gofer select` resolves it.
-- **Branch selection**: Before creating a worktree, `ticket_work.py` checks `active_branches` in config for a previously selected branch, then falls back to listing remote branches and prompting the operator via `gofer select`. Selected branches are persisted to `config.yaml` under `active_branches` so they survive restarts. Bash completion is available via `completions/gofer.bash`.
+- **File-based approval**: `approval.py` writes pending entries to JSON, polls for decisions. CLI `approve`/`reject` subcommands call `set_decision()`. The file-based `prompt_branch_select()` / `gofer select` mechanism remains available for daemon mode.
+- **Branch selection**: In batch mode (`gofer do`), branch selection happens **upfront** before the batch starts — `run_do()` iterates tickets, resolves repos, lists remote branches, and prompts the operator interactively via stdin. This lets the operator answer all prompts at once, then walk away while the batch runs unattended. Use `--skip-select` to bypass prompts (uses saved branches or starts fresh). In `_work_repo()`, the handler simply reads `active_branches` from config. Selected branches are persisted to `config.yaml` under `active_branches` so they survive restarts. Bash completion is available via `completions/gofer.bash`.
 - **Slack notifications**: `slack_client.post_slack()` is a no-op when `slack` config is absent. Callers don't need conditionals.
 - **Config migration**: `YamlConfig` has a `model_validator` that auto-migrates old flat project format (`{ repo, branch }`) to new `ProjectConfig` format. `ProjectConfig` has its own validator that normalizes single `RepoMapping` dicts into one-element lists for both `default` and `components`.
-- **Batch mode**: `gofer do` is a one-shot batch runner. `batch.py` fetches tickets via JQL, converts to events with `build_event_from_issue()`, and fires them all through `handle_ticket_work()` via `asyncio.gather()`. The `SessionManager` semaphore handles throttling.
+- **Batch mode**: `gofer do` is a one-shot batch runner. `batch.py` fetches tickets via JQL, converts to events with `build_event_from_issue()`, and fires them all through `handle_ticket_work()` via `asyncio.gather()`. The `SessionManager` semaphore handles throttling. Branch selection is collected upfront in `run_do()` before the batch starts.
 
 ## Conventions
 

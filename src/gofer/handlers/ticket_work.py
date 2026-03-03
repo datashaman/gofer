@@ -4,7 +4,7 @@ import logging
 from collections import OrderedDict
 from typing import TYPE_CHECKING
 
-from ..approval import prompt_approval, prompt_branch_select
+from ..approval import prompt_approval
 from ..config import RepoMapping, Settings, save_active_branch
 from ..dispatcher import handles
 from ..events import sanitize_log
@@ -18,7 +18,7 @@ from ..slack_client import (
     format_session_result,
     post_slack,
 )
-from ..worktree import ExistingWork, create_worktree, detect_existing_work, list_remote_branches
+from ..worktree import ExistingWork, create_worktree, detect_existing_work
 
 if TYPE_CHECKING:
     from ..progress import ProgressTracker
@@ -173,28 +173,15 @@ async def _work_repo(
         repo_mapping.branch,
     )
 
-    # Check config for a previously selected branch
+    # Read branch from config (set by upfront selection in `gofer do` or `gofer select`)
     selected_branch: str | None = settings.config.active_branches.get(event.issue_key)
     existing: ExistingWork | None = None
 
     if selected_branch:
         logger.info(
-            "Using previously selected branch %r for %s (from config)",
+            "Using selected branch %r for %s (from config)",
             selected_branch, event.issue_key,
         )
-    else:
-        # List remote branches and let operator select
-        branches = await list_remote_branches(repo_mapping.repo)
-        if branches:
-            if tracker is not None:
-                tracker.update(
-                    event.issue_key, "waiting_approval",
-                    f"select branch ({len(branches)} available)",
-                )
-
-            selected_branch = await prompt_branch_select(
-                event.issue_key, branches, settings,
-            )
 
     # Create worktree with selected or fresh branch
     try:
