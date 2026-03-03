@@ -168,7 +168,11 @@ async def _work_repo(
     gate_result = await check_gate(event, str(worktree.worktree_path), settings)
     if gate_result.needs_approval:
         if tracker is not None:
-            tracker.update(event.issue_key, "waiting_approval", f"complexity={gate_result.complexity}")
+            reason_summary = "; ".join(gate_result.reasons[:3]) if gate_result.reasons else ""
+            detail = f"complexity={gate_result.complexity} risk={gate_result.risk}"
+            if reason_summary:
+                detail += f" — {reason_summary}"
+            tracker.update(event.issue_key, "waiting_approval", detail)
         await post_slack(
             settings,
             format_approval_needed(
@@ -179,6 +183,8 @@ async def _work_repo(
             ),
         )
         approved = await prompt_approval(event.issue_key, gate_result, settings)
+        if approved and tracker is not None:
+            tracker.update(event.issue_key, "waiting_approval", "approved")
         if not approved:
             logger.info("Operator rejected %s — skipping session", event.issue_key)
             if tracker is not None:
