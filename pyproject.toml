@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "claude-code-sdk>=0.0.25",
+    "httpx>=0.27",
     "jira>=3.10.5",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",

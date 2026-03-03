@@ -7,6 +7,7 @@ from ..config import Settings
 from ..dispatcher import handles
 from ..jira_client import add_comment
 from ..models import JiraEvent
+from ..repo_resolver import resolve_repo
 from ..session import SessionResult, get_session_manager
 from ..worktree import create_worktree
 
@@ -85,13 +86,8 @@ async def handle_comment(event: JiraEvent, settings: Settings) -> None:
         return
 
     # Resolve repo mapping
-    repo_mapping = settings.config.projects.get(event.project)
+    repo_mapping = resolve_repo(settings, event.project, event.component, event.issue_key)
     if repo_mapping is None:
-        logger.warning(
-            "No repo mapping for project %s — cannot handle comment on %s",
-            event.project,
-            event.issue_key,
-        )
         return
 
     logger.info(

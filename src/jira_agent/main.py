@@ -9,6 +9,7 @@ from types import FrameType
 
 from pydantic import ValidationError
 
+from .approval import set_decision
 from .config import load_settings
 from .dispatcher import dispatch
 from .jira_client import init_jira_client
@@ -72,6 +73,19 @@ async def run_loop(settings_args: argparse.Namespace) -> None:
     logger.info("Shutdown complete.")
 
 
+def _setup_logging(args: argparse.Namespace) -> None:
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+    log_format = "%(asctime)s %(process)d %(levelname)-8s %(name)s: %(message)s"
+    log_handlers: list[logging.Handler] = [logging.StreamHandler()]
+    if args.log_file:
+        log_handlers.append(logging.FileHandler(args.log_file))
+    logging.basicConfig(
+        level=log_level,
+        format=log_format,
+        handlers=log_handlers,
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         prog="jira-agent",
@@ -83,12 +97,6 @@ def main() -> None:
         help="Path to config.yaml (default: config.yaml)",
     )
     parser.add_argument(
-        "--interval",
-        type=int,
-        default=None,
-        help="Override poll interval in seconds",
-    )
-    parser.add_argument(
         "--verbose", "-v",
         action="store_true",
         help="Enable debug logging",
@@ -98,24 +106,55 @@ def main() -> None:
         default=None,
         help="Path to log file (in addition to stderr)",
     )
-    args = parser.parse_args()
 
-    log_level = logging.DEBUG if args.verbose else logging.INFO
-    log_format = "%(asctime)s %(process)d %(levelname)-8s %(name)s: %(message)s"
-    handlers: list[logging.Handler] = [logging.StreamHandler()]
-    if args.log_file:
-        handlers.append(logging.FileHandler(args.log_file))
-    logging.basicConfig(
-        level=log_level,
-        format=log_format,
-        handlers=handlers,
+    subparsers = parser.add_subparsers(dest="command")
+
+    # Default daemon mode (no subcommand)
+    run_parser = subparsers.add_parser("run", help="Start the polling daemon")
+    run_parser.add_argument(
+        "--interval",
+        type=int,
+        default=None,
+        help="Override poll interval in seconds",
     )
 
-    signal.signal(signal.SIGINT, _handle_signal)
-    signal.signal(signal.SIGTERM, _handle_signal)
+    # Approve subcommand
+    approve_parser = subparsers.add_parser("approve", help="Approve a pending ticket")
+    approve_parser.add_argument("issue_key", help="Jira issue key (e.g. PROJ-123)")
+
+    # Reject subcommand
+    reject_parser = subparsers.add_parser("reject", help="Reject a pending ticket")
+    reject_parser.add_argument("issue_key", help="Jira issue key (e.g. PROJ-123)")
+
+    args = parser.parse_args()
+    _setup_logging(args)
 
     try:
-        asyncio.run(run_loop(args))
+        if args.command == "approve":
+            settings = load_settings(args.config)
+            if set_decision(args.issue_key, "approved", settings):
+                print(f"Approved {args.issue_key}")
+            else:
+                print(f"No pending approval found for {args.issue_key}", file=sys.stderr)
+                sys.exit(1)
+
+        elif args.command == "reject":
+            settings = load_settings(args.config)
+            if set_decision(args.issue_key, "rejected", settings):
+                print(f"Rejected {args.issue_key}")
+            else:
+                print(f"No pending approval found for {args.issue_key}", file=sys.stderr)
+                sys.exit(1)
+
+        else:
+            # Default: run the daemon (either no subcommand or "run")
+            if not hasattr(args, "interval"):
+                args.interval = None
+
+            signal.signal(signal.SIGINT, _handle_signal)
+            signal.signal(signal.SIGTERM, _handle_signal)
+            asyncio.run(run_loop(args))
+
     except ValidationError as e:
         logger.error("Configuration error — check .env and config.yaml:")
         for err in e.errors():

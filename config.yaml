@@ -3,11 +3,19 @@
 # Polling settings
 poll_interval: 60  # seconds between polls
 
-# Project-to-repo mapping
+# Project-to-repo mapping (supports component-level routing)
 projects:
   PROJ:
-    repo: /path/to/repo
-    branch: main
+    default:
+      repo: /path/to/repo
+      branch: main
+    components:
+      frontend:
+        repo: /path/to/frontend-repo
+        branch: develop
+      payments:
+        repo: /path/to/payments-service
+        branch: main
   # Add more project mappings as needed
 
 # Gate thresholds for autonomous work
@@ -20,3 +28,13 @@ gates:
 concurrency:
   max_parallel_sessions: 3
   session_timeout: 3600  # seconds
+
+# Optional — omit entire block to disable Slack
+# slack:
+#   webhook_url: "https://hooks.slack.com/services/T000/B000/xxxx"
+#   channel: "#jira-agent"
+
+# Approval settings (file-based flow for daemon mode)
+approvals:
+  pending_file: pending_approvals.json
+  timeout: 3600  # seconds before auto-reject

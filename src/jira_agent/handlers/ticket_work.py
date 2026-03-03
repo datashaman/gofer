@@ -7,7 +7,13 @@ from ..config import Settings
 from ..dispatcher import handles
 from ..gate import check_gate
 from ..models import JiraEvent
+from ..repo_resolver import resolve_repo
 from ..session import SessionResult, get_session_manager
+from ..slack_client import (
+    format_approval_needed,
+    format_session_result,
+    post_slack,
+)
 from ..worktree import create_worktree
 
 logger = logging.getLogger(__name__)
@@ -61,14 +67,9 @@ async def handle_ticket_work(event: JiraEvent, settings: Settings) -> None:
         logger.info("Session already completed for %s — skipping", event.issue_key)
         return
 
-    # Resolve repo mapping from project key
-    repo_mapping = settings.config.projects.get(event.project)
+    # Resolve repo mapping from project key + component
+    repo_mapping = resolve_repo(settings, event.project, event.component, event.issue_key)
     if repo_mapping is None:
-        logger.warning(
-            "No repo mapping for project %s — cannot handle %s",
-            event.project,
-            event.issue_key,
-        )
         return
 
     logger.info(
@@ -95,7 +96,16 @@ async def handle_ticket_work(event: JiraEvent, settings: Settings) -> None:
     # Complexity gate
     gate_result = await check_gate(event, worktree.worktree_path, settings)
     if gate_result.needs_approval:
-        approved = await prompt_approval(event.issue_key, gate_result)
+        await post_slack(
+            settings,
+            format_approval_needed(
+                event.issue_key,
+                gate_result.complexity,
+                gate_result.risk,
+                gate_result.reasons,
+            ),
+        )
+        approved = await prompt_approval(event.issue_key, gate_result, settings)
         if not approved:
             logger.info("Operator rejected %s — skipping session", event.issue_key)
             return
@@ -125,3 +135,14 @@ async def handle_ticket_work(event: JiraEvent, settings: Settings) -> None:
             event.issue_key,
             result.error,
         )
+
+    await post_slack(
+        settings,
+        format_session_result(
+            event.issue_key,
+            result.success,
+            result.cost_usd,
+            result.num_turns,
+            result.error,
+        ),
+    )

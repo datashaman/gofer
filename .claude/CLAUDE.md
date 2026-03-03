@@ -7,13 +7,16 @@ Python project using `uv` for package management. Source lives in `src/jira_agen
 - `uv sync` — install dependencies
 - `uv run jira-agent --help` — CLI usage
 - `uv run jira-agent --config config.yaml` — start polling
+- `uv run jira-agent run --interval 30` — start polling with interval override
 - `uv run jira-agent --log-file /path/to/file.log` — log to file (daemon mode)
+- `uv run jira-agent approve PROJ-123` — approve a pending ticket
+- `uv run jira-agent reject PROJ-123` — reject a pending ticket
 
 ## Project layout
 
 ```
 src/jira_agent/
-├── main.py          # Entry point, async poll loop, SIGINT/SIGTERM handling, CLI
+├── main.py          # Entry point, poll loop, CLI (run/approve/reject subcommands)
 ├── config.py        # EnvSettings (pydantic-settings) + YamlConfig → Settings
 ├── models.py        # JiraEvent, GateResult (Pydantic v2)
 ├── events.py        # classify_changes() — compares issue state diffs
@@ -23,9 +26,11 @@ src/jira_agent/
 ├── session.py       # SessionManager (semaphore-throttled) + SessionResult + singleton accessors
 ├── worktree.py      # Git worktree create/remove with subprocess timeouts
 ├── gate.py          # Two-stage complexity gate (heuristics skip Stage 2 if flagged)
-├── approval.py      # Terminal approval prompt for complex tickets
+├── approval.py      # File-based approval queue (pending_approvals.json) + set_decision()
+├── repo_resolver.py # resolve_repo(): component → default fallback repo resolution
+├── slack_client.py  # Async Slack webhook poster (httpx) + format helpers
 └── handlers/        # @handles-decorated async functions (imported at startup)
-    ├── ticket_work.py   # assigned_to_me, status_changed → worktree + gate + Claude → PR
+    ├── ticket_work.py   # assigned_to_me, status_changed → worktree + gate + Claude → PR + Slack
     ├── mention.py       # mentioned → Claude session → Jira comment reply
     └── comment.py       # commented → Claude session → Jira comment reply (or skip)
 ```
@@ -39,6 +44,10 @@ src/jira_agent/
 - **Event classification**: `events.classify_changes(issue, previous_state, my_email)` diffs raw Jira issue dicts to produce typed `JiraEvent` objects.
 - **Self-reply guards**: All handlers skip comments authored by the agent's own email. Comment handler defers to mention handler when a mention is detected.
 - **Response capture**: `SessionResult.response_text` captures the last assistant message text, used by mention/comment handlers to post replies to Jira.
+- **Repo resolution**: `repo_resolver.resolve_repo()` resolves component → default fallback. All handlers use it instead of direct dict lookups.
+- **File-based approval**: `approval.py` writes pending entries to JSON, polls for decisions. CLI `approve`/`reject` subcommands call `set_decision()`.
+- **Slack notifications**: `slack_client.post_slack()` is a no-op when `slack` config is absent. Callers don't need conditionals.
+- **Config migration**: `YamlConfig` has a `model_validator` that auto-migrates old flat project format (`{ repo, branch }`) to new `ProjectConfig` format (`{ default: { repo, branch }, components: {} }`).
 
 ## Conventions
 

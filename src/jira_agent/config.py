@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -23,6 +23,21 @@ class EnvSettings(BaseSettings):
 class RepoMapping(BaseModel):
     repo: str
     branch: str = "main"
+
+
+class ProjectConfig(BaseModel):
+    default: RepoMapping
+    components: dict[str, RepoMapping] = Field(default_factory=dict)
+
+
+class SlackConfig(BaseModel):
+    webhook_url: str
+    channel: str = "#jira-agent"
+
+
+class ApprovalsConfig(BaseModel):
+    pending_file: str = "pending_approvals.json"
+    timeout: int = 3600
 
 
 class GateConfig(BaseModel):
@@ -53,9 +68,33 @@ class ConcurrencyConfig(BaseModel):
 
 class YamlConfig(BaseModel):
     poll_interval: int = 60
-    projects: dict[str, RepoMapping] = Field(default_factory=dict)
+    projects: dict[str, ProjectConfig] = Field(default_factory=dict)
     gates: GateConfig = Field(default_factory=GateConfig)
     concurrency: ConcurrencyConfig = Field(default_factory=ConcurrencyConfig)
+    slack: SlackConfig | None = None
+    approvals: ApprovalsConfig = Field(default_factory=ApprovalsConfig)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_flat_projects(cls, data: Any) -> Any:
+        """Auto-migrate old flat project format to new ProjectConfig format.
+
+        Old: ``PROJ: { repo: /path, branch: main }``
+        New: ``PROJ: { default: { repo: /path, branch: main }, components: {} }``
+        """
+        if not isinstance(data, dict):
+            return data
+        projects = data.get("projects")
+        if not isinstance(projects, dict):
+            return data
+        migrated = {}
+        for key, value in projects.items():
+            if isinstance(value, dict) and "repo" in value and "default" not in value:
+                migrated[key] = {"default": value, "components": {}}
+            else:
+                migrated[key] = value
+        data["projects"] = migrated
+        return data
 
 
 class Settings(BaseModel):
