@@ -20,15 +20,19 @@ from . import handlers  # noqa: F401
 
 logger = logging.getLogger("jira_agent")
 
-_shutdown = asyncio.Event()
+_shutdown: asyncio.Event | None = None
 
 
 def _handle_signal(sig: int, _frame: FrameType | None) -> None:
     logger.info("Received signal %s, shutting down...", signal.Signals(sig).name)
-    _shutdown.set()
+    if _shutdown is not None:
+        _shutdown.set()
 
 
 async def run_loop(settings_args: argparse.Namespace) -> None:
+    global _shutdown
+    _shutdown = asyncio.Event()
+
     settings = load_settings(settings_args.config)
 
     if settings_args.interval:
@@ -89,11 +93,22 @@ def main() -> None:
         action="store_true",
         help="Enable debug logging",
     )
+    parser.add_argument(
+        "--log-file",
+        default=None,
+        help="Path to log file (in addition to stderr)",
+    )
     args = parser.parse_args()
 
+    log_level = logging.DEBUG if args.verbose else logging.INFO
+    log_format = "%(asctime)s %(process)d %(levelname)-8s %(name)s: %(message)s"
+    handlers: list[logging.Handler] = [logging.StreamHandler()]
+    if args.log_file:
+        handlers.append(logging.FileHandler(args.log_file))
     logging.basicConfig(
-        level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+        level=log_level,
+        format=log_format,
+        handlers=handlers,
     )
 
     signal.signal(signal.SIGINT, _handle_signal)

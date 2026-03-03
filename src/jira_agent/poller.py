@@ -4,10 +4,9 @@ import asyncio
 import logging
 from typing import Any
 
-from jira import JIRA
-
 from .config import Settings
 from .events import classify_changes
+from .jira_client import get_jira_client
 from .models import JiraEvent
 
 logger = logging.getLogger(__name__)
@@ -16,10 +15,6 @@ logger = logging.getLogger(__name__)
 class JiraPoller:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
-        self._client = JIRA(
-            server=settings.env.jira_url,
-            basic_auth=(settings.env.jira_email, settings.env.jira_api_token),
-        )
         # Maps issue key -> last seen raw issue dict
         self._state: dict[str, dict[str, Any]] = {}
         self._my_email = settings.env.jira_email
@@ -34,10 +29,11 @@ class JiraPoller:
         logger.debug("Polling with JQL: %s", jql)
 
         # jira library is synchronous, run in thread pool
-        loop = asyncio.get_event_loop()
+        client = get_jira_client()
+        loop = asyncio.get_running_loop()
         issues = await loop.run_in_executor(
             None,
-            lambda: self._client.search_issues(jql, maxResults=50, expand="changelog"),
+            lambda: client.search_issues(jql, maxResults=50),
         )
 
         all_events: list[JiraEvent] = []

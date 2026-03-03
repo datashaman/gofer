@@ -18,7 +18,10 @@ class Worktree:
     base_branch: str
 
 
-async def _run_git(*args: str, cwd: Path) -> str:
+_GIT_TIMEOUT = 60  # seconds
+
+
+async def _run_git(*args: str, cwd: Path, timeout: int = _GIT_TIMEOUT) -> str:
     """Run a git command asynchronously and return stdout."""
     proc = await asyncio.create_subprocess_exec(
         "git",
@@ -27,7 +30,12 @@ async def _run_git(*args: str, cwd: Path) -> str:
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    stdout, stderr = await proc.communicate()
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        proc.kill()
+        await proc.wait()
+        raise RuntimeError(f"git {' '.join(args)} timed out after {timeout}s")
     if proc.returncode != 0:
         raise RuntimeError(
             f"git {' '.join(args)} failed (rc={proc.returncode}): {stderr.decode().strip()}"

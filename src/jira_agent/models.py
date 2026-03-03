@@ -37,9 +37,3 @@ class GateResult(BaseModel):
     reasons: list[str] = Field(default_factory=list)
 
 
-class TicketContext(BaseModel):
-    event: JiraEvent
-    gate: GateResult | None = None
-    repo_path: str | None = None
-    branch: str | None = None
-    additional_context: dict[str, Any] = Field(default_factory=dict)

@@ -190,18 +190,17 @@ async def check_gate(
             "Gate Stage 1 flagged %s: %s", event.issue_key, heuristic_reasons,
         )
 
-    # Stage 2: Claude judgment
-    gate_result = await _check_claude_judgment(
-        event, worktree_path, settings.env.anthropic_api_key, gate_config,
-    )
-
-    # Merge heuristic reasons into result
-    if heuristic_reasons:
+    # Stage 2: Claude judgment (skip if heuristics already require approval)
+    if heuristic_flagged:
         gate_result = GateResult(
-            complexity=gate_result.complexity,
-            risk=gate_result.risk,
-            needs_approval=True,  # heuristic flags always require approval
-            reasons=heuristic_reasons + gate_result.reasons,
+            complexity="high",
+            risk="high",
+            needs_approval=True,
+            reasons=heuristic_reasons,
+        )
+    else:
+        gate_result = await _check_claude_judgment(
+            event, worktree_path, settings.env.anthropic_api_key, gate_config,
         )
 
     logger.info(

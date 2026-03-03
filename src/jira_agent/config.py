@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
 
 
 class EnvSettings(BaseSettings):
@@ -67,6 +70,7 @@ def load_settings(config_path: str | Path = "config.yaml") -> Settings:
             raw = yaml.safe_load(f) or {}
         yaml_config = YamlConfig(**raw)
     else:
+        logger.warning("Config file %s not found — using defaults", config_path)
         yaml_config = YamlConfig()
 
     env = EnvSettings()  # type: ignore[call-arg]

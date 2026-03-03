@@ -37,7 +37,7 @@ async def dispatch(event: JiraEvent, settings: Settings) -> None:
     """Look up and call the handler for the given event."""
     handler = _handlers.get(event.event_type)
     if handler is None:
-        logger.warning("No handler registered for event type: %s", event.event_type)
+        logger.debug("No handler registered for event type: %s", event.event_type)
         return
     logger.info(
         "Dispatching %s event for %s to %s",
@@ -45,4 +45,12 @@ async def dispatch(event: JiraEvent, settings: Settings) -> None:
         event.issue_key,
         handler.__name__,
     )
-    await handler(event, settings)
+    try:
+        await handler(event, settings)
+    except Exception:
+        logger.exception(
+            "Handler %s failed for %s %s",
+            handler.__name__,
+            event.event_type,
+            event.issue_key,
+        )

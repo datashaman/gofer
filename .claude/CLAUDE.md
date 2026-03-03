@@ -7,34 +7,43 @@ Python project using `uv` for package management. Source lives in `src/jira_agen
 - `uv sync` — install dependencies
 - `uv run jira-agent --help` — CLI usage
 - `uv run jira-agent --config config.yaml` — start polling
+- `uv run jira-agent --log-file /path/to/file.log` — log to file (daemon mode)
 
 ## Project layout
 
 ```
 src/jira_agent/
-├── main.py          # Entry point, async poll loop, SIGINT handling
+├── main.py          # Entry point, async poll loop, SIGINT/SIGTERM handling, CLI
 ├── config.py        # EnvSettings (pydantic-settings) + YamlConfig → Settings
-├── models.py        # JiraEvent, GateResult, TicketContext (Pydantic v2)
+├── models.py        # JiraEvent, GateResult (Pydantic v2)
 ├── events.py        # classify_changes() — compares issue state diffs
-├── dispatcher.py    # @handles() decorator registry + async dispatch()
-├── poller.py        # JiraPoller — JQL polling, tracks updated timestamps
+├── dispatcher.py    # @handles() decorator registry + async dispatch() with error isolation
+├── poller.py        # JiraPoller — JQL polling, tracks issue state diffs
+├── jira_client.py   # Shared JIRA client singleton + async add_comment() helper
+├── session.py       # SessionManager (semaphore-throttled) + SessionResult + singleton accessors
+├── worktree.py      # Git worktree create/remove with subprocess timeouts
+├── gate.py          # Two-stage complexity gate (heuristics skip Stage 2 if flagged)
+├── approval.py      # Terminal approval prompt for complex tickets
 └── handlers/        # @handles-decorated async functions (imported at startup)
-    ├── ticket_work.py   # assigned_to_me, status_changed
-    ├── mention.py       # mentioned
-    └── comment.py       # commented
+    ├── ticket_work.py   # assigned_to_me, status_changed → worktree + gate + Claude → PR
+    ├── mention.py       # mentioned → Claude session → Jira comment reply
+    └── comment.py       # commented → Claude session → Jira comment reply (or skip)
 ```
 
 ## Key patterns
 
-- **Decorator-based dispatch**: Handlers register via `@handles("event_type")` in `dispatcher.py`. Importing `handlers/__init__.py` triggers all registrations.
+- **Decorator-based dispatch**: Handlers register via `@handles("event_type")` in `dispatcher.py`. Importing `handlers/__init__.py` triggers all registrations. Handler exceptions are caught per-handler so one failure doesn't abort the poll batch.
+- **Singletons**: `jira_client.py` has `init_jira_client()`/`get_jira_client()`. `session.py` has `init_session_manager()`/`get_session_manager()`. Both initialized once in `main.py` before the poll loop.
 - **Config**: Secrets in `.env` (pydantic-settings), mappings in `config.yaml` (PyYAML). Both merge into a single `Settings` object via `load_settings()`.
-- **Async**: Main loop is async. Jira client is sync, wrapped with `run_in_executor`.
+- **Async**: Main loop is async. Jira client and git commands are sync, wrapped with `run_in_executor` or `asyncio.create_subprocess_exec`.
 - **Event classification**: `events.classify_changes(issue, previous_state, my_email)` diffs raw Jira issue dicts to produce typed `JiraEvent` objects.
+- **Self-reply guards**: All handlers skip comments authored by the agent's own email. Comment handler defers to mention handler when a mention is detected.
+- **Response capture**: `SessionResult.response_text` captures the last assistant message text, used by mention/comment handlers to post replies to Jira.
 
 ## Conventions
 
 - Python 3.13+, `from __future__ import annotations` in all modules
 - Pydantic v2 models with `BaseModel`
 - Type hints everywhere
-- Logging via `logging.getLogger(__name__)`
+- Logging via `logging.getLogger(__name__)`; PID included in log format
 - No test framework yet — verify manually with `uv run jira-agent`

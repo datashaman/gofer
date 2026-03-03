@@ -8,9 +8,6 @@ from .models import JiraEvent
 
 logger = logging.getLogger(__name__)
 
-# Fields we track for change detection
-TRACKED_FIELDS = {"status", "assignee", "labels", "summary", "description", "comment"}
-
 
 def _get_issue_key(issue: dict[str, Any]) -> str:
     return issue["key"]
