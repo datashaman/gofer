@@ -4,11 +4,12 @@ import logging
 from collections.abc import Callable, Coroutine
 from typing import Any
 
+from .config import Settings
 from .models import EventType, JiraEvent
 
 logger = logging.getLogger(__name__)
 
-HandlerFunc = Callable[[JiraEvent], Coroutine[Any, Any, None]]
+HandlerFunc = Callable[[JiraEvent, Settings], Coroutine[Any, Any, None]]
 
 _handlers: dict[str, HandlerFunc] = {}
 
@@ -32,7 +33,7 @@ def handles(*event_types: EventType) -> Callable[[HandlerFunc], HandlerFunc]:
     return decorator
 
 
-async def dispatch(event: JiraEvent) -> None:
+async def dispatch(event: JiraEvent, settings: Settings) -> None:
     """Look up and call the handler for the given event."""
     handler = _handlers.get(event.event_type)
     if handler is None:
@@ -44,4 +45,4 @@ async def dispatch(event: JiraEvent) -> None:
         event.issue_key,
         handler.__name__,
     )
-    await handler(event)
+    await handler(event, settings)
