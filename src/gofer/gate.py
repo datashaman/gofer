@@ -58,8 +58,9 @@ def _check_heuristics(event: JiraEvent, gate_config: GateConfig) -> tuple[bool, 
 # ---------------------------------------------------------------------------
 
 _GATE_SYSTEM_PROMPT = (
-    "You are a ticket complexity classifier. Assess the Jira ticket and respond "
-    "with a JSON object containing exactly these fields:\n"
+    "You are a ticket complexity classifier. All ticket information is provided "
+    "below — do NOT attempt to fetch or look up anything. Do NOT use any tools. "
+    "Assess the ticket and respond with a JSON object containing exactly these fields:\n"
     '  "complexity": "low" | "medium" | "high"\n'
     '  "risk": "low" | "medium" | "high"\n'
     '  "reasons": [short strings explaining your assessment]\n'
@@ -140,6 +141,7 @@ async def _check_claude_judgment(
         max_turns=1,
         cwd=worktree_path,
         system_prompt=_GATE_SYSTEM_PROMPT,
+        allowed_tools=[],
         permission_mode="plan",
         env={"ANTHROPIC_API_KEY": api_key, "CLAUDECODE": ""},
     )
@@ -158,6 +160,8 @@ async def _check_claude_judgment(
             needs_approval=True,
             reasons=["gate Claude call failed — defaulting to safe"],
         )
+
+    logger.debug("Gate raw response for %s: %s", event.issue_key, response_text[:500])
 
     if not response_text.strip():
         logger.warning("Empty response from gate Claude call — defaulting to high/high")
