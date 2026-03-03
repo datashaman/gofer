@@ -135,6 +135,26 @@ uv run gofer reject PROJ-123
 
 Stop with `Ctrl+C` — the agent shuts down gracefully, cancelling active sessions.
 
+### Batch mode (`gofer do`)
+
+One-shot mode that fetches all your open tickets on a project and works them in parallel:
+
+```bash
+# Work all your open tickets on PROJ
+uv run gofer do PROJ
+
+# Custom JQL query
+uv run gofer do --jql 'project=PROJ AND status="In Progress"'
+
+# Override concurrency limit
+uv run gofer do PROJ --max-parallel 2
+
+# Dry run — list matching tickets without working them
+uv run gofer do PROJ --dry-run
+```
+
+In a TTY, `gofer do` displays a Rich live table showing per-ticket progress. Log output is coordinated through the same Rich console so logs appear above the table without corrupting the display. In non-TTY mode (e.g. piped to a file), plain status lines are printed to stderr instead.
+
 ### Running as a launchd daemon
 
 A template plist is provided at `com.datashaman.gofer.plist`. To install:
@@ -230,6 +250,8 @@ src/gofer/
 ├── config.py        # .env (secrets) + config.yaml (mappings, gitignored) -> Settings
 ├── models.py        # JiraEvent, GateResult (Pydantic v2)
 ├── events.py        # Event classification from issue diffs
+├── batch.py         # Batch orchestrator: fetch_tickets() + run_batch() for `gofer do`
+├── progress.py      # Rich Live progress table for batch mode + log coordination
 ├── dispatcher.py    # @handles() decorator + dispatch() with error isolation
 ├── poller.py        # JQL polling with change detection
 ├── jira_client.py   # Shared JIRA client singleton + async add_comment()
@@ -238,6 +260,7 @@ src/gofer/
 ├── gate.py          # Two-stage complexity gate (heuristics + Claude judgment)
 ├── approval.py      # File-based approval queue (pending_approvals.json)
 ├── repo_resolver.py # Component -> default repo resolution
+├── repo_selector.py # Claude-based selection when component maps to multiple repos
 ├── slack_client.py  # Async Slack webhook poster + format helpers
 └── handlers/
     ├── ticket_work.py   # assigned_to_me, status_changed -> worktree + PR + Slack

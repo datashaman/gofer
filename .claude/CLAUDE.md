@@ -25,6 +25,7 @@ src/gofer/
 ├── models.py        # JiraEvent, GateResult (Pydantic v2)
 ├── events.py        # classify_changes() + build_event_from_issue() — event construction
 ├── batch.py         # Batch orchestrator: fetch_tickets() + run_batch() for `gofer do`
+├── progress.py      # Rich Live progress table for batch mode + RichHandler log coordination
 ├── dispatcher.py    # @handles() decorator registry + async dispatch() with error isolation
 ├── poller.py        # JiraPoller — JQL polling, tracks issue state diffs
 ├── jira_client.py   # Shared JIRA client singleton + async add_comment() helper
