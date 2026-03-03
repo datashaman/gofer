@@ -91,10 +91,11 @@ async def run_do(args: argparse.Namespace) -> None:
             status_filter = "AND statusCategory != Done"
         else:
             status_filter = f'AND statusCategory = "{args.status}"'
+        blocked_filter = "" if args.include_blocked else ' AND status != "Blocked"'
         jql = (
             f'assignee = currentUser() AND project = "{args.project}" '
             f"AND sprint in openSprints() "
-            f"{status_filter} ORDER BY priority DESC"
+            f"{status_filter}{blocked_filter} ORDER BY priority DESC"
         )
     else:
         print("Error: provide a project key or --jql", file=sys.stderr)
@@ -220,6 +221,11 @@ def main() -> None:
         "--all-statuses",
         action="store_true",
         help="Include all non-Done status categories",
+    )
+    do_parser.add_argument(
+        "--include-blocked",
+        action="store_true",
+        help='Include tickets with status "Blocked" (excluded by default)',
     )
     do_parser.add_argument(
         "--dry-run",
