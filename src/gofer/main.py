@@ -90,8 +90,12 @@ async def run_do(args: argparse.Namespace) -> None:
         if args.all_statuses:
             status_filter = "AND statusCategory != Done"
         else:
-            category = args.status or settings.config.batch.status_category
-            status_filter = f'AND statusCategory = "{category}"'
+            categories = args.status or settings.config.batch.status_categories
+            if len(categories) == 1:
+                status_filter = f'AND statusCategory = "{categories[0]}"'
+            else:
+                cat_list = ", ".join(f'"{c}"' for c in categories)
+                status_filter = f"AND statusCategory IN ({cat_list})"
 
         # Always apply exclude_statuses from config
         excludes = settings.config.batch.exclude_statuses
@@ -221,8 +225,9 @@ def main() -> None:
     )
     do_parser.add_argument(
         "--status",
+        nargs="+",
         default=None,
-        help='Filter by Jira status category (default: from config, "To Do")',
+        help='Filter by Jira status categories (default: from config, "To Do")',
     )
     do_parser.add_argument(
         "--all-statuses",

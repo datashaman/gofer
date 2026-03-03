@@ -14,7 +14,7 @@ Python project using `uv` for package management. Source lives in `src/gofer/`.
 - `uv run gofer do PROJ` — batch work all your open tickets on project PROJ
 - `uv run gofer do --jql 'project=PROJ AND ...'` — batch work with custom JQL
 - `uv run gofer do PROJ --max-parallel 2` — override concurrency limit
-- `uv run gofer do PROJ --status "In Progress"` — override status category filter
+- `uv run gofer do PROJ --status "To Do" "In Progress"` — override status category filter
 - `uv run gofer do PROJ --all-statuses` — include all non-Done statuses
 - `uv run gofer do PROJ --dry-run` — list matching tickets without working them
 

@@ -32,7 +32,8 @@ projects:
 
 # Batch mode defaults (gofer do)
 batch:
-  status_category: "To Do"       # default status category filter
+  status_categories:              # default status category filter
+    - "To Do"
   exclude_statuses:               # statuses excluded from batch runs
     - "Blocked"
 
