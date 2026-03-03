@@ -6,7 +6,7 @@ Python project using `uv` for package management. Source lives in `src/gofer/`.
 
 - `uv sync` — install dependencies
 - `uv run gofer --help` — CLI usage
-- `uv run gofer --config config.yaml` — start polling
+- `uv run gofer --config config.yaml` — start polling (config.yaml is gitignored; copy from config.example.yaml)
 - `uv run gofer run --interval 30` — start polling with interval override
 - `uv run gofer --log-file /path/to/file.log` — log to file (daemon mode)
 - `uv run gofer approve PROJ-123` — approve a pending ticket
@@ -39,7 +39,7 @@ src/gofer/
 
 - **Decorator-based dispatch**: Handlers register via `@handles("event_type")` in `dispatcher.py`. Importing `handlers/__init__.py` triggers all registrations. Handler exceptions are caught per-handler so one failure doesn't abort the poll batch.
 - **Singletons**: `jira_client.py` has `init_jira_client()`/`get_jira_client()`. `session.py` has `init_session_manager()`/`get_session_manager()`. Both initialized once in `main.py` before the poll loop.
-- **Config**: Secrets in `.env` (pydantic-settings), mappings in `config.yaml` (PyYAML). Both merge into a single `Settings` object via `load_settings()`.
+- **Config**: Secrets in `.env` (pydantic-settings), mappings in `config.yaml` (PyYAML, gitignored — template at `config.example.yaml`). Both merge into a single `Settings` object via `load_settings()`.
 - **Async**: Main loop is async. Jira client and git commands are sync, wrapped with `run_in_executor` or `asyncio.create_subprocess_exec`.
 - **Event classification**: `events.classify_changes(issue, previous_state, my_email)` diffs raw Jira issue dicts to produce typed `JiraEvent` objects.
 - **Self-reply guards**: All handlers skip comments authored by the agent's own email. Comment handler defers to mention handler when a mention is detected.

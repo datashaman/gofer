@@ -43,7 +43,7 @@ To receive notifications when approval is needed or a session completes:
    - Go to https://api.slack.com/apps → **Create New App** → **From scratch**
    - Under **Incoming Webhooks**, toggle it on and click **Add New Webhook to Workspace**
    - Choose a channel and copy the webhook URL
-2. Add the URL to `config.yaml` under `slack.webhook_url`. Omit the entire `slack` block to disable.
+2. Add the URL to your `config.yaml` under `slack.webhook_url`. Omit the entire `slack` block to disable.
 
 ### Local git repos
 
@@ -61,7 +61,9 @@ Repos must have a remote named `origin` for the agent to push branches and creat
 ```bash
 uv sync
 cp .env.example .env
+cp config.example.yaml config.yaml
 # Edit .env with your credentials
+# Edit config.yaml with your project/repo mappings
 ```
 
 ### Environment variables
@@ -75,7 +77,7 @@ cp .env.example .env
 
 ### Configuration
 
-Edit `config.yaml` to map Jira projects to local repos and configure gate thresholds:
+Edit your `config.yaml` (copied from `config.example.yaml`) to map Jira projects to local repos and configure gate thresholds:
 
 ```yaml
 poll_interval: 60
@@ -214,7 +216,7 @@ When `slack.webhook_url` is configured, the agent posts notifications for:
 - **Approval needed** — ticket key, complexity, risk, reasons, and approve/reject instructions
 - **Session completed** — ticket key, success/failure, turn count, cost
 
-Omit the `slack` block from `config.yaml` to disable (no errors, just debug logs).
+Omit the `slack` block from your `config.yaml` to disable (no errors, just debug logs).
 
 ### Self-reply guards
 
@@ -225,7 +227,7 @@ All handlers skip comments authored by the agent's own `JIRA_EMAIL` to prevent i
 ```
 src/gofer/
 ├── main.py          # Entry point: poll loop, signal handling, CLI (run/approve/reject)
-├── config.py        # .env (secrets) + config.yaml (mappings) -> Settings
+├── config.py        # .env (secrets) + config.yaml (mappings, gitignored) -> Settings
 ├── models.py        # JiraEvent, GateResult (Pydantic v2)
 ├── events.py        # Event classification from issue diffs
 ├── dispatcher.py    # @handles() decorator + dispatch() with error isolation
